@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#f7ddc6" />
+  <meta name="description" content="Lumen Hollow — a cozy, soothing platformer about gathering fireflies and wandering softly home." />
+  <title>Lumen Hollow</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g' cx='40%25' cy='35%25'%3E%3Cstop offset='0' stop-color='%23fffdf2'/%3E%3Cstop offset='.55' stop-color='%23ffe6a5'/%3E%3Cstop offset='1' stop-color='%23e8b571'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='11' fill='url(%23g)'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23fffdf2'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main id="app">
+    <canvas id="game" aria-label="Lumen Hollow game world"></canvas>
+    <div class="canvas-veil" aria-hidden="true"></div>
+
+    <!-- HUD -->
+    <div id="hud" class="hud hidden" aria-live="polite">
+      <div class="hud-pill">
+        <span class="firefly-glyph" aria-hidden="true"><i></i></span>
+        <span id="count" class="hud-count">0</span>
+        <span id="total" class="hud-total">/ 8</span>
+      </div>
+      <button id="pauseBtn" class="icon-btn" aria-label="Pause game" title="Pause (Esc)">
+        <span class="pause-bars" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <!-- Touch controls -->
+    <div id="touchControls" class="touch-controls hidden" aria-hidden="true">
+      <div class="touch-move">
+        <button class="touch-btn" data-act="left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" /></svg></button>
+        <button class="touch-btn" data-act="right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg></button>
+      </div>
+      <button class="touch-btn touch-jump" data-act="jump" aria-label="Jump">
+        <svg viewBox="0 0 24 24"><path d="M12 19V6M6.5 11.5 12 6l5.5 5.5" /></svg>
+      </button>
+    </div>
+
+    <!-- Level title card -->
+    <div id="levelCard" class="level-card hidden" aria-hidden="true">
+      <span id="levelChapter" class="level-chapter">chapter one</span>
+      <h2 id="levelName">Dawn Meadow</h2>
+      <span class="level-rule"></span>
+    </div>
+
+    <div id="toast" class="toast hidden" role="status"></div>
+
+    <!-- Start screen -->
+    <section id="startScreen" class="overlay start-screen show" aria-label="Start menu">
+      <div class="menu-fireflies" aria-hidden="true">
+        <span style="--x:12%;--y:24%;--d:0s"></span>
+        <span style="--x:82%;--y:18%;--d:1.4s"></span>
+        <span style="--x:72%;--y:64%;--d:2.6s"></span>
+        <span style="--x:22%;--y:70%;--d:3.4s"></span>
+        <span style="--x:52%;--y:12%;--d:4.2s"></span>
+      </div>
+      <div class="start-inner">
+        <p class="eyebrow">a quiet little journey</p>
+        <h1 class="title">Lumen <span>Hollow</span></h1>
+        <p class="tagline">gather the fireflies,<br class="mobile-break" /> wander softly home</p>
+        <div class="start-actions">
+          <button id="startBtn" class="btn primary">tap to start</button>
+          <button id="soundBtnStart" class="btn ghost small">
+            <span class="sound-dot" aria-hidden="true"></span> sound
+          </button>
+        </div>
+        <p id="continueHint" class="continue-hint hidden">your journey is saved <button id="freshBtn" class="link">begin anew</button></p>
+        <p class="control-hint">
+          <span class="key">←</span><span class="key">→</span> or <span class="key">A</span><span class="key">D</span> to wander
+          <span class="dot-sep">·</span>
+          <span class="key wide">space</span> to leap
+          <span class="dot-sep">·</span>
+          <span class="key wide">esc</span> to pause
+        </p>
+      </div>
+      <p class="start-foot">made for slow afternoons</p>
+    </section>
+
+    <!-- Pause screen -->
+    <section id="pauseScreen" class="overlay pause-screen" aria-label="Pause menu">
+      <div class="panel">
+        <p class="eyebrow">take a breath</p>
+        <h2 class="panel-title">paused</h2>
+        <div class="panel-actions">
+          <button id="resumeBtn" class="btn primary">keep wandering</button>
+          <button id="settingsBtn" class="btn soft">sound</button>
+          <button id="restartBtn" class="btn soft">restart level</button>
+          <button id="menuBtn" class="btn text">back to the meadow</button>
+        </div>
+        <p class="panel-note">nothing is ever lost here</p>
+      </div>
+    </section>
+
+    <!-- Sound settings -->
+    <section id="settingsScreen" class="overlay settings-screen" aria-label="Sound settings">
+      <div class="panel">
+        <p class="eyebrow">a softer world</p>
+        <h2 class="panel-title">sound</h2>
+        <div class="slider-row">
+          <label for="musicRange">music</label>
+          <input id="musicRange" class="range" type="range" min="0" max="100" value="65" />
+          <span id="musicValue" class="slider-value">65</span>
+        </div>
+        <div class="slider-row">
+          <label for="sfxRange">ambience &amp; effects</label>
+          <input id="sfxRange" class="range" type="range" min="0" max="100" value="78" />
+          <span id="sfxValue" class="slider-value">78</span>
+        </div>
+        <button id="muteBtn" class="btn soft mute-toggle" aria-pressed="false">
+          <span class="mute-icon" aria-hidden="true">♪</span> <span id="muteLabel">mute everything</span>
+        </button>
+        <button id="closeSettingsBtn" class="btn primary">that's lovely</button>
+      </div>
+    </section>
+
+    <!-- Level complete -->
+    <section id="completeScreen" class="overlay complete-screen" aria-label="Level complete">
+      <div class="panel complete-panel">
+        <div class="bloom-mark" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><i></i>
+        </div>
+        <p class="eyebrow">the hollow sighs happily</p>
+        <h2 id="completeTitle" class="panel-title">level complete</h2>
+        <p id="completeSub" class="complete-sub">the fireflies settle around you</p>
+        <p class="complete-count"><span class="firefly-glyph small" aria-hidden="true"><i></i></span><span id="completeCount">8 / 8</span> gathered</p>
+        <button id="nextBtn" class="btn primary">wander onward</button>
+        <button id="completeMenuBtn" class="btn text">back to the meadow</button>
+      </div>
+    </section>
+
+    <noscript><p class="noscript">Lumen Hollow needs JavaScript to bloom.</p></noscript>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
