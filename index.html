@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#08141c" />
+<title>Aetherbound — Shards of Dawn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     AETHERBOUND — UI / HUD / MENUS
+     ============================================================ */
+  :root {
+    --gold: #ffd98a;
+    --gold-deep: #e8ae4e;
+    --cyan: #8ff7ec;
+    --cyan-deep: #38d8d0;
+    --rose: #ff6f91;
+    --ink: #071016;
+    --ink-soft: #0d1e28;
+    --glass: rgba(10, 26, 34, 0.62);
+    --glass-line: rgba(160, 240, 235, 0.18);
+    --text: #eefcfb;
+    --muted: #9fb8bd;
+    --font-display: "Cinzel", "Times New Roman", serif;
+    --font-body: "Outfit", system-ui, -apple-system, sans-serif;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #041016; color: var(--text);
+    font-family: var(--font-body);
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  canvas { display: block; }
+  #game { position: fixed; inset: 0; }
+  #game canvas { width: 100%; height: 100%; outline: none; }
+
+  /* ---------- universal screen / overlay ---------- */
+  #ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .screen {
+    position: fixed; inset: 0; display: none; pointer-events: auto;
+    align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 30% 30%, rgba(9, 41, 48, 0.42), rgba(2, 9, 13, 0.82) 62%, rgba(1, 6, 9, 0.94));
+    backdrop-filter: blur(7px) saturate(1.1);
+    -webkit-backdrop-filter: blur(7px) saturate(1.1);
+  }
+  .screen.visible { display: flex; animation: screenIn 0.35s cubic-bezier(.2,.8,.2,1); }
+  @keyframes screenIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .vignette-frame {
+    position: fixed; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 180px rgba(0,0,0,0.55);
+    z-index: 5;
+  }
+
+  /* ---------- loading ---------- */
+  #loading {
+    position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(circle at 50% 42%, #123b44, #071219 58%, #03080c 100%);
+    transition: opacity .8s ease, visibility .8s;
+    pointer-events: auto;
+  }
+  #loading.hidden { opacity: 0; visibility: hidden; }
+  .load-mark { width: 92px; height: 92px; position: relative; filter: drop-shadow(0 0 24px rgba(128, 245, 232, .55)); }
+  .load-mark svg { width: 100%; height: 100%; animation: spinSlow 9s linear infinite; }
+  .load-mark::after {
+    content: ""; position: absolute; inset: 28px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #d8fff9, #51e3d8 38%, #0b5f66 75%);
+    box-shadow: 0 0 26px #63efe0;
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+  @keyframes spinSlow { to { transform: rotate(360deg); } }
+  @keyframes pulseGlow { 0%,100% { transform: scale(.92); opacity: .85; } 50% { transform: scale(1.06); opacity: 1; } }
+  .load-title { font-family: var(--font-display); font-size: 22px; letter-spacing: .38em; color: var(--gold); text-transform: uppercase; }
+  .load-bar { width: min(340px, 66vw); height: 3px; background: rgba(255,255,255,.1); border-radius: 4px; overflow: hidden; }
+  .load-bar > i { display: block; height: 100%; width: 0%; border-radius: 4px; background: linear-gradient(90deg, #3fdacb, #ffe29a); box-shadow: 0 0 16px #71efe3; transition: width .3s ease; }
+  .load-tip { font-size: 12px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+
+  /* ---------- main menu ---------- */
+  #menu { justify-content: flex-start; background: linear-gradient(100deg, rgba(2, 10, 14, .9) 0%, rgba(3, 15, 21, .6) 38%, rgba(2, 9, 13, .05) 72%, rgba(2, 8, 11, .25) 100%); backdrop-filter: blur(0px); }
+  .menu-inner {
+    margin-left: clamp(22px, 7vw, 110px); width: min(560px, 86vw);
+    display: flex; flex-direction: column; gap: 30px; padding: 30px 0;
+    animation: menuRise .9s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes menuRise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  .brand-kicker { display: flex; align-items: center; gap: 12px; font-size: 11px; letter-spacing: .42em; text-transform: uppercase; color: var(--cyan); opacity: .9; }
+  .brand-kicker::before { content: ""; width: 38px; height: 1px; background: linear-gradient(90deg, transparent, var(--cyan)); }
+  .brand-title {
+    font-family: var(--font-display); font-weight: 800; margin: 0;
+    font-size: clamp(46px, 7vw, 94px); line-height: .94; letter-spacing: .02em;
+    width: fit-content;
+    background: linear-gradient(168deg, #fff7dc 8%, #ffe1a0 35%, #e9b257 62%, #8ff7ec 130%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 8px 38px rgba(255, 202, 112, .18));
+  }
+  .brand-sub { display: block; font-family: var(--font-body); font-size: clamp(12px, 1.4vw, 16px); letter-spacing: .5em; text-transform: uppercase; color: #d7ece9; margin-top: 12px; opacity: .76; }
+  .brand-line { height: 1px; width: 72%; background: linear-gradient(90deg, rgba(255,216,138,.7), rgba(255,216,138,0)); margin-top: 2px; }
+  .brand-desc { color: #b8d0d2; font-size: 15px; line-height: 1.7; max-width: 440px; font-weight: 300; }
+  .menu-actions { display: flex; flex-direction: column; gap: 11px; width: min(330px, 100%); margin-top: 4px; }
+
+  .btn {
+    position: relative; pointer-events: auto; cursor: pointer; border: 1px solid var(--glass-line);
+    background: linear-gradient(120deg, rgba(17, 48, 58, .72), rgba(7, 23, 31, .55));
+    color: var(--text); font-family: var(--font-body); font-weight: 500;
+    padding: 14px 22px; border-radius: 10px; text-align: left;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    letter-spacing: .06em; font-size: 14px; backdrop-filter: blur(8px);
+    transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+    overflow: hidden;
+  }
+  .btn::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, transparent, var(--cyan), transparent); opacity: 0; transition: opacity .2s; }
+  .btn:hover { transform: translateX(5px); border-color: rgba(143,247,236,.42); background: linear-gradient(120deg, rgba(25, 72, 80, .8), rgba(9, 31, 40, .68)); box-shadow: 0 12px 30px rgba(0,0,0,.28); }
+  .btn:hover::before { opacity: 1; }
+  .btn.primary { background: linear-gradient(120deg, rgba(255, 214, 130, .16), rgba(15, 46, 52, .8) 60%); border-color: rgba(255, 218, 144, .38); }
+  .btn.primary .btn-label { color: var(--gold); }
+  .btn-label { display: flex; align-items: center; gap: 12px; }
+  .btn-key { font-size: 10px; letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
+  .btn-icon { width: 18px; height: 18px; opacity: .9; }
+  .btn-arrow { color: var(--cyan); opacity: .65; font-size: 16px; transition: transform .2s, opacity .2s; }
+  .btn:hover .btn-arrow { transform: translateX(3px); opacity: 1; }
+  .btn:disabled { opacity: .36; cursor: default; transform: none; }
+
+  .menu-footer { display: flex; gap: 20px; align-items: center; color: #6e8b90; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; flex-wrap: wrap; }
+  .menu-footer b { color: #b9d6d5; font-weight: 500; }
+  .menu-badge { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid rgba(160,240,235,.16); border-radius: 20px; background: rgba(8,26,32,.4); }
+  .menu-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: #7df4e6; box-shadow: 0 0 10px #7df4e6; }
+
+  /* ---------- generic panel ---------- */
+  .panel {
+    position: relative; width: min(760px, 92vw); max-height: min(86vh, 780px); overflow: auto;
+    background: linear-gradient(150deg, rgba(11, 34, 42, .94), rgba(4, 15, 21, .96));
+    border: 1px solid rgba(159, 240, 233, .16); border-radius: 18px;
+    box-shadow: 0 34px 100px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+    padding: 30px clamp(20px, 4vw, 42px) 32px;
+    animation: panelRise .4s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes panelRise { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: none; } }
+  .panel::before { content: ""; position: absolute; inset: 0 0 auto; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,218,144,.45), transparent); }
+  .panel-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+  .panel-title { font-family: var(--font-display); font-size: 26px; letter-spacing: .12em; color: #fff5da; margin: 0; }
+  .panel-kicker { font-size: 10px; letter-spacing: .3em; color: var(--cyan); text-transform: uppercase; margin-bottom: 6px; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(156,236,230,.22);
+    background: rgba(9, 29, 36, .7); color: #cfeceb; cursor: pointer; font-size: 20px;
+    display: flex; align-items: center; justify-content: center; transition: .2s;
+  }
+  .icon-btn:hover { border-color: var(--gold); color: var(--gold); transform: rotate(90deg); }
+
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 30px; }
+  @media (max-width: 640px) { .settings-grid { grid-template-columns: 1fr; } }
+  .setting { display: flex; flex-direction: column; gap: 8px; padding: 13px 0; border-bottom: 1px solid rgba(255,255,255,.055); }
+  .setting-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .setting-name { font-size: 13px; letter-spacing: .05em; color: #dcedec; }
+  .setting-value { font-size: 11px; letter-spacing: .1em; color: var(--gold); text-transform: uppercase; }
+  .setting-hint { font-size: 11px; color: #6f8c90; line-height: 1.5; }
+  .seg { display: flex; background: rgba(2, 11, 15, .6); border: 1px solid rgba(160,240,235,.13); border-radius: 8px; padding: 3px; gap: 3px; }
+  .seg button {
+    flex: 1; border: 0; background: transparent; color: #8da8ab; padding: 7px 8px; border-radius: 6px;
+    font-family: var(--font-body); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+    transition: .16s;
+  }
+  .seg button:hover { color: #dff7f4; }
+  .seg button.active { background: linear-gradient(120deg, rgba(255,216,140,.19), rgba(70,208,198,.14)); color: var(--gold); box-shadow: inset 0 0 0 1px rgba(255,216,140,.18); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: rgba(255,255,255,.13); border-radius: 4px; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 12px rgba(255,216,140,.5); cursor: pointer; }
+  .toggle { width: 40px; height: 22px; border-radius: 20px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.08); position: relative; cursor: pointer; transition: .2s; flex: none; }
+  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #9bb1b3; transition: .2s; }
+  .toggle.on { background: rgba(68, 218, 203, .35); border-color: rgba(111,245,232,.4); }
+  .toggle.on::after { left: 21px; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+
+  .help-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  @media (max-width: 720px) { .help-grid { grid-template-columns: 1fr; } }
+  .help-card { background: rgba(4, 17, 22, .5); border: 1px solid rgba(160,240,235,.1); border-radius: 12px; padding: 16px 18px; }
+  .help-card h4 { margin: 0 0 12px; font-size: 12px; letter-spacing: .22em; color: var(--cyan); text-transform: uppercase; font-weight: 600; }
+  .key-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,.055); font-size: 12px; color: #bed3d3; }
+  .key-row:last-child { border-bottom: 0; }
+  .keys { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  kbd { font-family: var(--font-body); font-size: 10px; min-width: 22px; text-align: center; padding: 3px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,.16); border-bottom-width: 2px; background: rgba(255,255,255,.07); color: #e8f7f5; }
+  .help-note { margin-top: 16px; color: #77979a; font-size: 11px; line-height: 1.6; letter-spacing: .02em; }
+
+  .big-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 26px; }
+  .big-actions .btn { flex: 1 1 160px; justify-content: center; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; opacity: 0; transition: opacity .4s; pointer-events: none; }
+  #hud.visible { opacity: 1; }
+  .hud-top-left { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: calc(22px + var(--safe-l)); display: flex; flex-direction: column; gap: 10px; }
+  .hearts { display: flex; gap: 5px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.5)); }
+  .heart { width: 24px; height: 22px; transition: transform .2s, opacity .2s; }
+  .heart svg { width: 100%; height: 100%; }
+  .heart.full path { fill: #ff6d8f; }
+  .heart.empty path { fill: rgba(255,255,255,.12); stroke: rgba(255,255,255,.2); stroke-width: .7; }
+  .heart.pop { animation: heartPop .35s cubic-bezier(.2,1.7,.4,1); }
+  @keyframes heartPop { 0% { transform: scale(1); } 50% { transform: scale(1.35); } 100% { transform: scale(1); } }
+  .hud-chip {
+    display: inline-flex; align-items: center; gap: 8px; width: fit-content;
+    padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(150,230,225,.14);
+    background: rgba(4, 18, 24, .52); backdrop-filter: blur(6px);
+    font-size: 11px; letter-spacing: .12em; color: #c9e4e2; text-transform: uppercase;
+  }
+  .hud-chip .gem-ico { width: 14px; height: 14px; filter: drop-shadow(0 0 6px #6ff3e7); }
+  .hud-chip b { color: #fff3d6; font-weight: 600; letter-spacing: .04em; }
+
+  .hud-top-center { position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); text-align: center; width: min(440px, 60vw); }
+  .zone-label { font-family: var(--font-display); font-size: 14px; letter-spacing: .34em; color: rgba(255, 244, 218, .9); text-transform: uppercase; text-shadow: 0 2px 14px rgba(0,0,0,.75), 0 1px 2px rgba(0,0,0,.7); }
+  .objective { margin-top: 5px; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #c6dcda; display: flex; align-items: center; justify-content: center; gap: 8px; text-shadow: 0 1px 10px rgba(0,0,0,.85), 0 1px 2px rgba(0,0,0,.8); }
+  .objective .obj-diamond { width: 6px; height: 6px; transform: rotate(45deg); background: var(--gold); box-shadow: 0 0 10px var(--gold); animation: objPulse 2.2s ease-in-out infinite; }
+  @keyframes objPulse { 0%,100% { opacity: .45; transform: rotate(45deg) scale(.8); } 50% { opacity: 1; transform: rotate(45deg) scale(1.15); } }
+
+  .hud-top-right { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); right: calc(22px + var(--safe-r)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .hud-pause {
+    width: 34px; height: 34px; border-radius: 50%; pointer-events: auto; cursor: pointer;
+    border: 1px solid rgba(160, 240, 235, .22); background: rgba(4,18,24,.48);
+    color: #cfeceb; display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(5px); transition: .2s; font-size: 0;
+  }
+  .hud-pause::before, .hud-pause::after {
+    content: ""; width: 3px; height: 11px; border-radius: 1px; background: currentColor;
+    box-shadow: 5px 0 0 currentColor;
+  }
+  .hud-pause:hover { border-color: var(--gold); color: var(--gold); }
+  .compass { width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(160, 240, 235, .22); background: rgba(4,18,24,.42); position: relative; backdrop-filter: blur(5px); transition: opacity .3s; }
+  .compass.hidden { opacity: 0; }
+  .compass::before { content: ""; position: absolute; inset: 6px; border: 1px solid rgba(160,240,235,.12); border-radius: 50%; }
+  .compass-arrow { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-origin: 50% 50%; transition: transform .12s linear; filter: drop-shadow(0 0 5px rgba(255,216,140,.8)); }
+  .compass-arrow::before { content: ""; position: absolute; left: -5px; top: -13px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 12px solid var(--gold); }
+  .compass .compass-dist { position: absolute; left: 50%; bottom: -13px; transform: translateX(-50%); font-size: 8px; letter-spacing: .08em; color: #91aaad; white-space: nowrap; }
+
+  .dash-meter { position: absolute; bottom: calc(26px + var(--safe-b)); left: calc(26px + var(--safe-l)); width: 82px; height: 82px; opacity: .9; }
+  @media (max-width: 820px) { .dash-meter { display: none; } }
+  .dash-meter svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+  .dash-meter .track { fill: none; stroke: rgba(255,255,255,.09); stroke-width: 3; }
+  .dash-meter .fill { fill: none; stroke: url(#dashGrad); stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .1s linear; }
+  .dash-meter .label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 8px; letter-spacing: .18em; color: #9ebdbf; text-transform: uppercase; }
+  .dash-meter .label b { font-size: 12px; color: #d9f4f0; font-weight: 500; letter-spacing: .04em; }
+
+  .combo-pop { position: absolute; left: 50%; top: 25%; transform: translate(-50%, -10px) scale(.9); font-family: var(--font-display); font-size: 30px; color: var(--gold); text-shadow: 0 0 24px rgba(255,200,100,.5); opacity: 0; transition: .18s; letter-spacing: .06em; }
+  .combo-pop.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+
+  #bossbar { position: fixed; left: 50%; bottom: calc(42px + var(--safe-b)); transform: translateX(-50%) translateY(16px); width: min(620px, 72vw); opacity: 0; transition: opacity .4s, transform .4s; pointer-events: none; z-index: 12; }
+  #bossbar.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .boss-meta { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 7px; }
+  .boss-name { font-family: var(--font-display); font-size: 16px; letter-spacing: .22em; text-transform: uppercase; color: #ffe9c0; text-shadow: 0 2px 12px rgba(0,0,0,.8); }
+  .boss-phase { font-size: 9px; letter-spacing: .2em; color: #c3a276; text-transform: uppercase; }
+  .boss-track { height: 10px; border-radius: 8px; background: rgba(3,10,14,.78); border: 1px solid rgba(255, 220, 160, .22); overflow: hidden; position: relative; box-shadow: 0 6px 28px rgba(0,0,0,.5); }
+  .boss-fill { height: 100%; width: 100%; border-radius: 7px; background: linear-gradient(90deg, #a73e46, #ff7b66 45%, #ffd38c); transition: width .25s ease; box-shadow: 0 0 18px rgba(255,120,90,.5); position: relative; }
+  .boss-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.35), transparent 62%); }
+  .boss-ticks { position: absolute; inset: 0; display: flex; justify-content: space-evenly; }
+  .boss-ticks i { width: 1px; background: rgba(0,0,0,.4); }
+
+  /* ---------- toasts / zone card / interact ---------- */
+  #toasts { position: fixed; top: calc(86px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 30; pointer-events: none; }
+  .toast {
+    display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 30px;
+    background: rgba(5, 22, 28, .78); border: 1px solid rgba(160,240,235,.18); backdrop-filter: blur(10px);
+    font-size: 11px; letter-spacing: .13em; text-transform: uppercase; color: #d9f4f1;
+    animation: toastIn .45s cubic-bezier(.2,1.3,.4,1), toastOut .5s 2.7s forwards; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  .toast .t-ico { font-size: 14px; color: var(--gold); filter: drop-shadow(0 0 6px rgba(255,216,140,.7)); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-12px) scale(.94); } to { opacity: 1; transform: none; } }
+  @keyframes toastOut { to { opacity: 0; transform: translateY(-8px) scale(.97); } }
+
+  #zonecard { position: fixed; left: 50%; top: 39%; transform: translate(-50%, -50%); text-align: center; z-index: 28; pointer-events: none; opacity: 0; }
+  #zonecard.show { animation: zoneShow 4.2s ease forwards; }
+  #zonecard .zc-kicker { font-size: 10px; letter-spacing: .5em; color: var(--cyan); text-transform: uppercase; margin-bottom: 10px; opacity: .8; }
+  #zonecard .zc-name { font-family: var(--font-display); font-size: clamp(30px, 5vw, 62px); letter-spacing: .12em; color: #fff6dd; text-shadow: 0 0 50px rgba(255,210,120,.35), 0 4px 18px rgba(0,0,0,.6); white-space: nowrap; }
+  #zonecard .zc-line { width: 90px; height: 1px; margin: 15px auto 0; background: linear-gradient(90deg, transparent, rgba(255,216,140,.8), transparent); }
+  #zonecard .zc-sub { margin-top: 10px; font-size: 10px; letter-spacing: .3em; color: #a9c4c4; text-transform: uppercase; }
+  @keyframes zoneShow {
+    0% { opacity: 0; transform: translate(-50%, -46%) scale(.98); filter: blur(6px); }
+    12% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+    75% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -53%); }
+  }
+
+  #interact { position: fixed; left: 50%; bottom: 22%; transform: translateX(-50%) translateY(8px); z-index: 24; padding: 10px 20px; border-radius: 30px; background: rgba(4,18,24,.72); border: 1px solid rgba(255,220,160,.3); backdrop-filter: blur(8px); font-size: 11px; letter-spacing: .16em; color: #ffe9c1; text-transform: uppercase; opacity: 0; transition: .25s; pointer-events: none; }
+  #interact.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #interact kbd { margin-right: 8px; }
+
+  #reticle { position: fixed; width: 26px; height: 26px; margin: -13px 0 0 -13px; z-index: 22; pointer-events: none; opacity: 0; transition: opacity .2s; filter: drop-shadow(0 0 5px rgba(255,210,130,.7)); }
+  #reticle.visible { opacity: 1; }
+  #reticle::before, #reticle::after { content: ""; position: absolute; background: rgba(255, 224, 158, .9); }
+  #reticle::before { left: 50%; top: 0; width: 1px; height: 8px; box-shadow: 0 18px 0 rgba(255,224,158,.9); }
+  #reticle::after { top: 50%; left: 0; height: 1px; width: 8px; box-shadow: 18px 0 0 rgba(255,224,158,.9); }
+
+  #damage-vignette { position: fixed; inset: 0; pointer-events: none; z-index: 20; opacity: 0; background: radial-gradient(ellipse at center, transparent 42%, rgba(255, 30, 60, .42) 100%); transition: opacity .25s; }
+  #damage-vignette.flash { animation: dmgFlash .55s ease-out; }
+  @keyframes dmgFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
+  #heal-vignette { position: fixed; inset: 0; pointer-events: none; z-index: 20; opacity: 0; background: radial-gradient(ellipse at center, transparent 48%, rgba(80, 255, 210, .22) 100%); }
+  #heal-vignette.flash { animation: dmgFlash .8s ease-out; }
+
+  #fade { position: fixed; inset: 0; background: #020a0e; opacity: 0; pointer-events: none; z-index: 60; transition: opacity .5s ease; }
+  #fade.black { opacity: 1; pointer-events: auto; }
+
+  #lockhint { position: fixed; bottom: calc(30px + var(--safe-b)); left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: .22em; color: rgba(190,220,220,.4); text-transform: uppercase; z-index: 12; pointer-events: none; }
+
+  /* ---------- touch controls ---------- */
+  #touch { position: fixed; inset: 0; z-index: 16; pointer-events: none; display: none; }
+  body.touch-mode #touch { display: block; }
+  #touch .stick-zone {
+    position: absolute; left: calc(22px + var(--safe-l)); bottom: calc(24px + var(--safe-b));
+    width: 150px; height: 150px; pointer-events: auto; touch-action: none;
+  }
+  .stick-base {
+    position: absolute; inset: 18px; border-radius: 50%; border: 1px solid rgba(163, 240, 233, .22);
+    background: radial-gradient(circle, rgba(8, 30, 37, .3), rgba(4, 17, 22, .5)); backdrop-filter: blur(4px);
+    box-shadow: inset 0 0 30px rgba(0,0,0,.25);
+  }
+  .stick-knob {
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+    border: 1px solid rgba(153, 247, 237, .4); background: radial-gradient(circle at 38% 34%, rgba(156, 255, 245, .42), rgba(30, 112, 110, .45) 65%, rgba(7, 30, 36, .5));
+    box-shadow: 0 0 20px rgba(90, 240, 225, .2); transition: transform .06s linear;
+  }
+  .stick-arrows { position: absolute; inset: 0; pointer-events: none; opacity: .22; }
+  .stick-arrows i { position: absolute; width: 0; height: 0; border: 5px solid transparent; }
+  .stick-arrows i:nth-child(1) { left: 50%; top: 7%; margin-left: -5px; border-bottom-color: #bff; border-top: 0; }
+  .stick-arrows i:nth-child(2) { left: 50%; bottom: 7%; margin-left: -5px; border-top-color: #bff; border-bottom: 0; }
+  .stick-arrows i:nth-child(3) { top: 50%; left: 7%; margin-top: -5px; border-right-color: #bff; border-left: 0; }
+  .stick-arrows i:nth-child(4) { top: 50%; right: 7%; margin-top: -5px; border-left-color: #bff; border-right: 0; }
+  .touch-actions { position: absolute; right: calc(18px + var(--safe-r)); bottom: calc(22px + var(--safe-b)); width: 190px; height: 190px; pointer-events: none; }
+  .tbtn {
+    position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%;
+    border: 1px solid rgba(163, 240, 233, .28); background: radial-gradient(circle at 38% 32%, rgba(36, 92, 97, .62), rgba(5, 22, 28, .7));
+    color: #e8fffa; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    font-size: 8px; letter-spacing: .14em; text-transform: uppercase; backdrop-filter: blur(6px);
+    box-shadow: 0 6px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.12);
+  }
+  .tbtn svg { width: 20px; height: 20px; opacity: .92; }
+  .tbtn.active { background: radial-gradient(circle at 38% 32%, rgba(120, 255, 238, .42), rgba(12, 52, 58, .8)); border-color: rgba(180,255,245,.7); }
+  .tbtn.jump { right: 12px; bottom: 66px; width: 78px; height: 78px; }
+  .tbtn.attack { right: 82px; bottom: 12px; width: 64px; height: 64px; }
+  .tbtn.dash { right: 8px; bottom: 0px; width: 56px; height: 56px; }
+  .tbtn.lock { right: 76px; bottom: 84px; width: 46px; height: 46px; opacity: .8; }
+  .touch-look { position: absolute; right: 0; top: 90px; bottom: 230px; width: 48%; pointer-events: auto; touch-action: none; }
+
+  /* ---------- game over / victory ---------- */
+  .end-inner { text-align: center; max-width: 540px; padding: 20px; }
+  .end-kicker { font-size: 11px; letter-spacing: .46em; color: var(--cyan); text-transform: uppercase; }
+  .end-title { font-family: var(--font-display); font-size: clamp(42px, 7vw, 78px); margin: 14px 0 8px; color: #fff1cf; line-height: 1; }
+  .end-title.dead { color: #ff9b9b; text-shadow: 0 0 40px rgba(255,70,90,.25); }
+  .end-sub { color: #a8c2c4; font-size: 14px; line-height: 1.7; margin-bottom: 26px; }
+  .end-stats { display: flex; gap: 26px; justify-content: center; margin: 20px 0 8px; }
+  .end-stat { display: flex; flex-direction: column; gap: 3px; }
+  .end-stat b { font-family: var(--font-display); font-size: 24px; color: var(--gold); }
+  .end-stat span { font-size: 9px; letter-spacing: .2em; color: #7f9da0; text-transform: uppercase; }
+
+  /* ---------- mobile / responsive ---------- */
+  @media (max-width: 760px) {
+    .brand-title { font-size: 52px; }
+    .brand-desc { font-size: 13px; max-width: 320px; }
+    .menu-inner { gap: 22px; margin-left: 24px; }
+    .menu-footer { display: none; }
+    .hud-top-center { display: none; }
+    .hud-top-left { top: 12px; left: 14px; }
+    .hud-top-right { top: 12px; right: 14px; }
+    .hearts .heart { width: 20px; height: 18px; }
+    #bossbar { width: 88vw; bottom: calc(150px + var(--safe-b)); }
+    .panel { padding: 22px 18px; border-radius: 14px; }
+    .panel-title { font-size: 21px; }
+    .screen { align-items: center; }
+    .menu-actions .btn { padding: 13px 17px; }
+  }
+  @media (max-height: 520px) and (orientation: landscape) {
+    .brand-title { font-size: 40px; }
+    .menu-inner { gap: 14px; padding: 10px 0; }
+    .brand-desc { display: none; }
+    .menu-actions .btn { padding: 9px 14px; }
+    .panel { max-height: 92vh; }
+  }
+</style>
+</head>
+<body>
+  <div id="game"></div>
+  <div class="vignette-frame"></div>
+
+  <div id="ui">
+    <div id="hud">
+      <div class="hud-top-left">
+        <div class="hearts" id="hearts"></div>
+        <div class="hud-chip"><span class="gem-ico">
+          <svg viewBox="0 0 20 20"><path d="M10 1.6 17.3 10 10 18.4 2.7 10z" fill="#7df4e8" stroke="#d8fffa" stroke-width=".7"/><path d="M10 4.2 14.4 10 10 15.8 5.6 10z" fill="#bffcf4" opacity=".6"/></svg>
+        </span><b id="gem-count">0</b><span id="gem-total">/ 32</span> shards</div>
+      </div>
+      <div class="hud-top-center">
+        <div class="zone-label" id="zone-label">Sunlit Meadow</div>
+        <div class="objective"><span class="obj-diamond"></span><span id="objective-text">Explore the meadow · gather dawn shards</span></div>
+      </div>
+      <div class="hud-top-right">
+        <button class="hud-pause" id="btn-hud-pause" aria-label="Pause"></button>
+        <div class="compass" id="compass"><div class="compass-arrow" id="compass-arrow"></div><div class="compass-dist" id="compass-dist"></div></div>
+        <div class="hud-chip" id="quality-chip" style="font-size:9px">HIGH</div>
+      </div>
+      <div class="dash-meter">
+        <svg viewBox="0 0 80 80">
+          <defs><linearGradient id="dashGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8ff7ec"/><stop offset="1" stop-color="#ffd98a"/></linearGradient></defs>
+          <circle class="track" cx="40" cy="40" r="34"/>
+          <circle class="fill" id="dash-ring" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="0"/>
+        </svg>
+        <div class="label"><span>Dash</span><b id="dash-ready">READY</b></div>
+      </div>
+      <div class="combo-pop" id="combo-pop">x2</div>
+    </div>
+
+    <div id="combo" style="display:none"></div>
+
+    <div id="bossbar">
+      <div class="boss-meta"><span class="boss-name" id="boss-name">Moss Golem</span><span class="boss-phase" id="boss-phase">Phase I</span></div>
+      <div class="boss-track"><div class="boss-fill" id="boss-fill"></div><div class="boss-ticks"><i></i><i></i><i></i></div></div>
+    </div>
+
+    <div id="toasts"></div>
+    <div id="zonecard"><div class="zc-kicker">Now entering</div><div class="zc-name" id="zc-name">Sunlit Meadow</div><div class="zc-line"></div><div class="zc-sub" id="zc-sub">Where the world wakes</div></div>
+    <div id="interact"></div>
+    <div id="reticle"></div>
+    <div id="damage-vignette"></div>
+    <div id="heal-vignette"></div>
+    <div id="lockhint">M · mute &nbsp;·&nbsp; Esc · pause &nbsp;·&nbsp; click · capture mouse</div>
+
+    <div id="touch">
+      <div class="stick-zone" id="stick-zone">
+        <div class="stick-base"><div class="stick-arrows"><i></i><i></i><i></i><i></i></div></div>
+        <div class="stick-knob" id="stick-knob"></div>
+      </div>
+      <div class="touch-actions">
+        <div class="tbtn jump" data-touch="jump"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Jump</div>
+        <div class="tbtn attack" data-touch="attack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m14 4 6 6-3 3-6-6zM11 7 4 14l-1 6 6-1 7-7"/></svg>Attack</div>
+        <div class="tbtn dash" data-touch="dash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg>Dash</div>
+        <div class="tbtn lock" data-touch="lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Lock</div>
+      </div>
+      <div class="touch-look" id="touch-look"></div>
+    </div>
+
+    <div id="fade"></div>
+  </div>
+
+  <!-- ============================ LOADING ============================ -->
+  <div id="loading">
+    <div class="load-mark">
+      <svg viewBox="0 0 100 100" fill="none" stroke="rgba(159,247,238,.5)" stroke-width="1">
+        <circle cx="50" cy="50" r="46" stroke-dasharray="4 9"/>
+        <circle cx="50" cy="50" r="36" stroke-dasharray="1 6"/>
+        <path d="M50 12 55 45 88 50 55 55 50 88 45 55 12 50 45 45z" fill="rgba(159,247,238,.12)" stroke="rgba(255,220,150,.55)"/>
+      </svg>
+    </div>
+    <div class="load-title">Aetherbound</div>
+    <div class="load-bar"><i id="load-fill"></i></div>
+    <div class="load-tip" id="load-tip">Weaving light into the world…</div>
+  </div>
+
+  <!-- ============================ MAIN MENU ============================ -->
+  <div id="menu" class="screen">
+    <div class="menu-inner">
+      <div class="brand-kicker">A luminous action adventure · Stage 1</div>
+      <div>
+        <h1 class="brand-title">AETHERBOUND</h1>
+        <div class="brand-sub">Shards of Dawn</div>
+        <div class="brand-line"></div>
+      </div>
+      <p class="brand-desc">The Sunlit Meadow is awake. Stage 1 is a playable movement and rendering test — run, double jump, wall climb, dash and strike across the first realm while the road beyond stays sealed.</p>
+      <div class="menu-actions">
+        <button class="btn primary" id="btn-continue"><span class="btn-label"><span>Enter the Meadow</span></span><span class="btn-arrow">→</span></button>
+        <button class="btn" id="btn-new"><span class="btn-label"><span>New Journey</span></span><span class="btn-key">Enter</span></button>
+        <button class="btn" id="btn-settings-menu"><span class="btn-label"><span>Settings</span></span><span class="btn-arrow">→</span></button>
+        <button class="btn" id="btn-controls-menu"><span class="btn-label"><span>Controls</span></span><span class="btn-arrow">→</span></button>
+      </div>
+      <div class="menu-footer">
+        <span class="menu-badge"><span class="dot"></span> Stage 1 · Meadow</span>
+        <span>Keyboard · Gamepad · Touch</span>
+        <span>8 shards · 2 shrines</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ SETTINGS ============================ -->
+  <div id="settings" class="screen">
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-kicker">Sensory calibration</div><h2 class="panel-title">Settings</h2></div>
+        <button class="icon-btn" data-close="settings">✕</button>
+      </div>
+      <div class="settings-grid">
+        <div class="setting">
+          <div class="setting-head"><span class="setting-name">Graphics quality</span><span class="setting-value" id="quality-value">High</span></div>
+          <div class="seg" id="quality-seg">
+            <button data-quality="low">Low</button><button data-quality="medium">Med</button><button data-quality="high">High</button><button data-quality="ultra">Ultra</button>
+          </div>
+          <div class="setting-hint">Shadows, post-processing, SSAO and render resolution. Auto-adjusts if FPS drops.</div>
+        </div>
+        <div class="setting">
+          <div class="setting-head"><span class="setting-name">Render scale</span><span class="setting-value" id="scale-value">100%</span></div>
+          <input type="range" id="render-scale" min="60" max="150" step="5" value="100" />
+          <div class="setting-hint">Dynamic resolution keeps the frame rate smooth on mid-range devices.</div>
+        </div>
+        <div class="setting">
+          <div class="setting-head"><span class="setting-name">Bloom &amp; god rays</span><div class="toggle on" id="toggle-post"></div></div>
+          <div class="setting-hint">Cinematic glow, atmospheric shafts and screen-space polish.</div>
+        </div>
+        <div class="setting">
+          <div class="setting-head"><span class="setting-name">Soft shadows</span><div class="toggle on" id="toggle-shadows"></div></div>
+          <div class="setting-hint">High-resolution cascaded-style sun shadows.</div>
+        </div>
+        <div class="setting">
+          <div class="setting-head"><span class="setting-name">Look sensitivity</span><span class="setting-value" id="sens-value">1.0×</span></div>
+          <input type="range" id="look-sens" min="40" max="200" step="5" value="100" />
+          <div class="setting-hint">Mouse, gamepad and touch camera speed.</div>
+        </div>
+        <div class="setting">
+          <div class="setting-head"><span class="setting-name">Invert camera Y</span><div class="toggle" id="toggle-invert"></div></div>
+          <div class="setting-hint">For pilots of a certain age.</div>
+        </div>
+        <div class="setting">
+          <div class="setting-head"><span class="setting-name">Master volume</span><span class="setting-value" id="master-value">80%</span></div>
+          <input type="range" id="master-vol" min="0" max="100" step="1" value="80" />
+        </div>
+        <div class="setting">
+          <div class="setting-head"><span class="setting-name">Music</span><span class="setting-value" id="music-value">55%</span></div>
+          <input type="range" id="music-vol" min="0" max="100" step="1" value="55" />
+        </div>
+      </div>
+      <div class="big-actions">
+        <button class="btn" id="btn-reset-save" style="flex:0 1 auto"><span class="btn-label">Reset save data</span></button>
+        <button class="btn primary" data-close="settings" style="flex:1"><span class="btn-label">Done</span><span class="btn-arrow">→</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ CONTROLS ============================ -->
+  <div id="controls" class="screen">
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-kicker">Move like light</div><h2 class="panel-title">Controls</h2></div>
+        <button class="icon-btn" data-close="controls">✕</button>
+      </div>
+      <div class="help-grid">
+        <div class="help-card">
+          <h4>Keyboard &amp; Mouse</h4>
+          <div class="key-row"><span>Move</span><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></div>
+          <div class="key-row"><span>Jump / double jump</span><span class="keys"><kbd>Space</kbd></span></div>
+          <div class="key-row"><span>Dash</span><span class="keys"><kbd>Shift</kbd></span></div>
+          <div class="key-row"><span>Attack combo</span><span class="keys"><kbd>J</kbd><kbd>LMB</kbd></span></div>
+          <div class="key-row"><span>Lock-on</span><span class="keys"><kbd>Q</kbd><kbd>MMB</kbd></span></div>
+          <div class="key-row"><span>Orbit camera</span><span class="keys"><kbd>Mouse</kbd></span></div>
+          <div class="key-row"><span>Pause</span><span class="keys"><kbd>Esc</kbd></span></div>
+        </div>
+        <div class="help-card">
+          <h4>Gamepad</h4>
+          <div class="key-row"><span>Move</span><span class="keys"><kbd>L-Stick</kbd></span></div>
+          <div class="key-row"><span>Camera</span><span class="keys"><kbd>R-Stick</kbd></span></div>
+          <div class="key-row"><span>Jump / double</span><span class="keys"><kbd>A</kbd></span></div>
+          <div class="key-row"><span>Dash</span><span class="keys"><kbd>RB</kbd></span></div>
+          <div class="key-row"><span>Attack</span><span class="keys"><kbd>X</kbd></span></div>
+          <div class="key-row"><span>Lock-on</span><span class="keys"><kbd>LB</kbd></span></div>
+          <div class="key-row"><span>Pause</span><span class="keys"><kbd>Start</kbd></span></div>
+        </div>
+        <div class="help-card">
+          <h4>Touch</h4>
+          <div class="key-row"><span>Move</span><span class="keys"><kbd>Left stick</kbd></span></div>
+          <div class="key-row"><span>Camera</span><span class="keys"><kbd>Drag right</kbd></span></div>
+          <div class="key-row"><span>Jump / double</span><span class="keys"><kbd>Jump</kbd></span></div>
+          <div class="key-row"><span>Dash</span><span class="keys"><kbd>Dash</kbd></span></div>
+          <div class="key-row"><span>Attack</span><span class="keys"><kbd>Attack</kbd></span></div>
+          <div class="key-row"><span>Lock-on</span><span class="keys"><kbd>Lock</kbd></span></div>
+          <div class="key-row"><span>Pause</span><span class="keys"><kbd>⏸ top-right</kbd></span></div>
+        </div>
+        <div class="help-card">
+          <h4>Advanced movement</h4>
+          <div class="key-row"><span>Hold jump</span><span class="keys">Higher arc</span></div>
+          <div class="key-row"><span>Wall slide</span><span class="keys">Push into wall + fall</span></div>
+          <div class="key-row"><span>Wall jump</span><span class="keys"><kbd>Space</kbd> on wall</span></div>
+          <div class="key-row"><span>Ledge grab</span><span class="keys">Fall near a ledge</span></div>
+          <div class="key-row"><span>Ledge climb</span><span class="keys"><kbd>Space</kbd></span></div>
+          <div class="key-row"><span>Dash i-frames</span><span class="keys">Pass through danger</span></div>
+          <div class="key-row"><span>Lock-on</span><span class="keys">Camera tracks foe</span></div>
+          <div class="help-note">Coyote time, jump buffering and input buffering are always on. The controller is collision-safe at fixed 120 Hz.</div>
+        </div>
+      </div>
+      <div class="big-actions">
+        <button class="btn primary" data-close="controls" style="flex:1"><span class="btn-label">Got it</span><span class="btn-arrow">→</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ PAUSE ============================ -->
+  <div id="pause" class="screen">
+    <div class="panel" style="width:min(430px,92vw)">
+      <div class="panel-head">
+        <div><div class="panel-kicker">The world holds its breath</div><h2 class="panel-title">Paused</h2></div>
+        <button class="icon-btn" id="btn-pause-close">✕</button>
+      </div>
+      <div class="menu-actions" style="width:100%">
+        <button class="btn primary" id="btn-resume"><span class="btn-label">Resume</span><span class="btn-key">Esc</span></button>
+        <button class="btn" id="btn-settings-pause"><span class="btn-label">Settings</span><span class="btn-arrow">→</span></button>
+        <button class="btn" id="btn-controls-pause"><span class="btn-label">Controls</span><span class="btn-arrow">→</span></button>
+        <button class="btn" id="btn-save-quit"><span class="btn-label">Save &amp; return to title</span><span class="btn-arrow">→</span></button>
+      </div>
+      <div class="help-note" style="text-align:center">Progress saved at every checkpoint, shard and boss.</div>
+    </div>
+  </div>
+
+  <!-- ============================ GAME OVER ============================ -->
+  <div id="gameover" class="screen">
+    <div class="end-inner">
+      <div class="end-kicker">The dawn dims</div>
+      <h1 class="end-title dead">Unbound</h1>
+      <p class="end-sub">Your light scattered into the Aether. The last shrine still remembers you.<br />Return to the ember and try again.</p>
+      <div class="end-stats">
+        <div class="end-stat"><b id="go-shards">0</b><span>Shards</span></div>
+        <div class="end-stat"><b id="go-zone">Meadow</b><span>Furthest realm</span></div>
+        <div class="end-stat"><b id="go-time">0:00</b><span>Journey</span></div>
+      </div>
+      <div class="big-actions" style="justify-content:center">
+        <button class="btn primary" id="btn-respawn" style="flex:1 1 200px"><span class="btn-label">Return to checkpoint</span><span class="btn-arrow">→</span></button>
+        <button class="btn" id="btn-go-menu" style="flex:0 1 160px"><span class="btn-label">Title screen</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ VICTORY ============================ -->
+  <div id="victory" class="screen">
+    <div class="end-inner">
+      <div class="end-kicker">The light remembers</div>
+      <h1 class="end-title">Dawnbound</h1>
+      <p class="end-sub">The Aether is whole again. Four realms breathe beneath a mended sky,<br />and the shards of dawn sing your name.</p>
+      <div class="end-stats">
+        <div class="end-stat"><b id="vi-shards">32</b><span>Shards</span></div>
+        <div class="end-stat"><b id="vi-bosses">4/4</b><span>Wardens</span></div>
+        <div class="end-stat"><b id="vi-time">0:00</b><span>Journey</span></div>
+      </div>
+      <div class="big-actions" style="justify-content:center">
+        <button class="btn primary" id="btn-keep-playing" style="flex:1 1 220px"><span class="btn-label">Keep exploring</span><span class="btn-arrow">→</span></button>
+        <button class="btn" id="btn-victory-menu" style="flex:0 1 160px"><span class="btn-label">Title screen</span></button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
