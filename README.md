@@ -17,3 +17,34 @@
 - 🌍 [Create with OMGithub](https://go.ondev.store/).
 - 🧬 [Explore the remix source](https://github.com/mangunpangianjaya-ai/PlayGround).
 <!-- omgithub:readme:end -->
+
+## IRONFANG — Hunt. Break. Forge.
+
+A self-contained, low-poly monster hunting game for desktop and mobile. Pick a weapon, take a quest from the board, break monster parts for extra materials, defeat the beast, and forge stronger gear at the hub.
+
+- **Three weapons:** Great Sword (charge/guard), Dual Blades (Demon Mode), Sword & Shield (guard/bashes)
+- **Three hunts:** Forest Drake, Fire Wyvern, Ice Behemoth — each with its own arena, attack patterns, and materials
+- **Progression:** weapon upgrades, unlockable skins, auto-saving rewards
+- **No build step:** all rendering, audio, and models are procedural
+
+### Run locally
+
+```bash
+python3 -m http.server 3002
+# open http://localhost:3002
+```
+
+### Controls
+
+| Action | Keyboard / mouse | Touch |
+| --- | --- | --- |
+| Move | `WASD` / arrows | Left joystick |
+| Attack / charge | `J` or left click (hold to charge Great Sword) | ATTACK |
+| Special / guard | `K` or right click | SPECIAL |
+| Dodge | `Space` | DODGE |
+| Potion | `E` | ITEM |
+| Lock on | `F` / `Q` / `Tab` | Target button |
+| Camera | Mouse / drag | Drag anywhere |
+| Pause | `Esc` | Pause button |
+
+Hunts last up to 10 minutes. Break the head, tail, and wings for bonus materials. Progress saves automatically in the browser.
