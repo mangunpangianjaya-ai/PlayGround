@@ -8,7 +8,8 @@ import { UI } from './ui.js';
 import { FX } from './fx.js';
 import { Player } from './player.js';
 import { Monster } from './monster.js';
-import { createArena } from './arena.js';
+import { createWorld } from './world.js';
+import { MapRenderer } from './mapview.js';
 import { WEAPONS, QUESTS, MATERIALS, upgradeCost, canAfford } from './data.js';
 import { loadSave, writeSave, resetSave } from './save.js';
 
@@ -52,15 +53,26 @@ export class Game {
     this.fx = new FX(this.scene);
     this.ui = new UI(this);
     this.input = new Input(this, canvas);
+
+    // The frontier is built once and persists across camp, hunts and results.
+    this.world = createWorld(this.scene, this.renderer);
+    this.arena = this.world;
+    this.map = new MapRenderer(this.world);
+    this.worldHudTimer = 0;
+    this.nearStation = null;
+    this.mapOpen = false;
+    this.mapReturnState = 'hub';
+
     this.input.onPause = () => {
       if (this.state === 'hunt') this.setPaused(true);
       else if (this.state === 'pause') this.setPaused(false);
+      else if (this.mapOpen) this.closeMap();
+      else if (this.state === 'camp') this.exitCamp();
     };
 
     this.state = 'title';
     this.time = 0;
     this.lockOn = false;
-    this.arena = null;
     this.player = null;
     this.monster = null;
     this.currentQuest = null;
@@ -83,6 +95,9 @@ export class Game {
     this._bind();
     this.buildHub();
     this.ui.showScreen('title');
+    this.ui.showWorldHud(false);
+    this.ui.showCampHud(false);
+    this.ui.hideInteract();
     this.applySettings();
     this.ui.setFade(false);
     this.last = performance.now();
@@ -105,6 +120,15 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       // Input is disabled while paused, so handle the resume shortcut here.
       if (e.code === 'Escape' && this.state === 'pause') this.setPaused(false);
+      if (e.code === 'Escape' && this.mapOpen) this.closeMap();
+      if (e.code === 'KeyM' && !this.mapOpen && (this.state === 'camp' || this.state === 'hub')) {
+        e.preventDefault();
+        this.openMap();
+      }
+      if ((e.code === 'KeyE' || e.code === 'Enter') && this.state === 'camp' && !this.mapOpen) {
+        this.interactNearest();
+        this.input.clearPresses();
+      }
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state === 'hunt') this.setPaused(true);
@@ -136,23 +160,25 @@ export class Game {
     this.zones = [];
     if (this.monster) { this.monster.destroy(); this.monster = null; }
     if (this.player) { this.player.destroy(); this.player = null; }
-    if (this.arena) { this.arena.dispose(); this.arena = null; }
     this.fx.clear();
   }
 
   buildHub() {
     this.state = this.state === 'title' ? 'title' : 'hub';
     this.clearWorld();
-    this.arena = createArena('hub', this.scene, this.renderer);
     this.spawnHubPlayer();
     this.hubTime = 0;
     this.camYaw = 0.28;
     this.camPitch = 0.2;
     this.lockOn = false;
+    this.mapOpen = false;
     this.audio.startMusic('hub');
     this.audio.setIntensity(1);
-    this.camera.position.set(0, 3, 10);
-    this.camera.lookAt(0, 1.2, 2);
+    this.world.focus?.(this.player.pos, this.camera);
+    this.camera.position.set(5, this.player.root.position.y + 4, 15);
+    this.camera.lookAt(this.player.pos.x, this.player.root.position.y + 1.2, this.player.pos.z);
+    this.ui.showCampHud(false);
+    this.ui.hideInteract();
   }
 
   spawnHubPlayer() {
@@ -161,7 +187,7 @@ export class Game {
     const lvl = this.save.weaponLevels[id];
     const skin = this.save.skins[id];
     this.player = new Player(this.scene, this, id, lvl, skin);
-    this.player.setPosition(this.arena.hubPlayer);
+    this.player.setPosition(this.world.hubPlayer);
     this.player.facing = 0.15;
     this.player.root.rotation.y = 0.15;
   }
@@ -177,6 +203,9 @@ export class Game {
       this.ui.showScreen('hub');
       this.ui.showHuntHud(false);
       this.ui.applyTouchVisibility(false);
+      this.ui.showWorldHud(true);
+      this.ui.showCampHud(false);
+      this.ui.hideInteract();
       this.input.setEnabled(false);
       this.ui.setFade(false);
     }, 120);
@@ -188,22 +217,31 @@ export class Game {
     this.audio.unlock();
     this.currentQuest = quest;
     this.state = 'hunt';
+    this.mapOpen = false;
     this.clearWorld();
     this.ui.setFade(true);
 
-    this.arena = createArena(quest.arena, this.scene, this.renderer);
+    const spawn = this.world.spawnFor(quest.arena || quest.id);
     const weaponId = this.save.weapon;
     this.player = new Player(this.scene, this, weaponId, this.save.weaponLevels[weaponId], this.save.skins[weaponId]);
-    this.player.reset(this.arena.playerStart);
-    this.player.facing = Math.PI;
-    this.player.root.rotation.y = Math.PI;
+    this.player.reset(spawn.player);
+    this.player.facing = Math.atan2(spawn.monster.x - spawn.player.x, spawn.monster.z - spawn.player.z);
+    this.player.root.rotation.y = this.player.facing;
+
+    this.world.monsterStart.copy(spawn.monster);
+    this.world.playerStart.copy(spawn.player);
     this.monster = new Monster(this.scene, this, quest.monster);
-    this.monster.pos.copy(this.arena.monsterStart);
-    this.monster.root.position.copy(this.monster.pos);
-    this.monster.yaw = 0;
-    this.monster.root.rotation.y = 0;
+    this.monster.pos.copy(spawn.monster);
+    this.monster.root.position.copy(spawn.monster);
+    this.monster.yaw = Math.atan2(spawn.player.x - spawn.monster.x, spawn.player.z - spawn.monster.z);
+    this.monster.root.rotation.y = this.monster.yaw;
     this.monster.state = 'roar';
     this.monster.timer = 0;
+
+    // Position the camera at the drop point before prewarming terrain chunks.
+    this.camera.position.set(spawn.player.x + 6, spawn.player.y + 5, spawn.player.z + 10);
+    this.camera.lookAt(spawn.player.x, spawn.player.y + 1.4, spawn.player.z);
+    this.world.focus?.(spawn.player, this.camera);
 
     this.lockOn = false;
     this.huntOver = false;
@@ -232,9 +270,12 @@ export class Game {
     this.ui.showScreen(null);
     this.ui.showHuntHud(true);
     this.ui.applyTouchVisibility(true);
+    this.ui.showWorldHud(true);
+    this.ui.showCampHud(false);
+    this.ui.hideInteract();
     this.ui.setFade(false);
     this.ui.announce(quest.monsterName.toUpperCase(), '', 2.4);
-    this.ui.subtitle(quest.hint, 3.4);
+    this.ui.subtitle(`${spawn.region} · ${quest.hint}`, 3.6);
     this.input.reset();
     this.input.setEnabled(true);
     this.audio.startMusic('battle');
@@ -254,6 +295,171 @@ export class Game {
     this.input.setEnabled(false);
     this.input.exitPointerLock();
     this.goHub();
+  }
+
+  // ------------------------------------------------------------
+  // camp hub, stations and map
+  // ------------------------------------------------------------
+  enterCamp() {
+    if (this.state !== 'hub' && this.state !== 'title') return;
+    if (!this.player) this.spawnHubPlayer();
+    this.state = 'camp';
+    this.mapOpen = false;
+    this.lockOn = false;
+    this.ui.hideAllScreens();
+    this.ui.showHuntHud(false);
+    this.ui.applyTouchVisibility(true);
+    this.ui.showWorldHud(true);
+    this.ui.showCampHud(true);
+    this.ui.setFade(false);
+    this.input.reset();
+    this.input.setEnabled(true);
+    if (this.audio.musicMode !== 'hub') this.audio.startMusic('hub');
+    this.hubTime = 0;
+    this.camYaw = 0.32;
+    this.camPitch = 0.24;
+    this.camera.position.set(this.player.pos.x + 6, this.player.root.position.y + 4.2, this.player.pos.z + 8);
+    this.camera.lookAt(this.player.pos.x, this.player.root.position.y + 1.2, this.player.pos.z);
+    this.ui.toast('Camp · walk to a station and press E', 2.2);
+  }
+
+  exitCamp() {
+    if (this.state !== 'camp') return;
+    this.state = 'hub';
+    this.mapOpen = false;
+    this.input.setEnabled(false);
+    this.input.exitPointerLock();
+    this.ui.showScreen('hub');
+    this.ui.showCampHud(false);
+    this.ui.hideInteract();
+    this.ui.applyTouchVisibility(false);
+    this.ui.showWorldHud(true);
+    this.audio.ui();
+  }
+
+  updateCamp(dt) {
+    if (!this.player) return;
+    this.world.update(dt, this.time, this.player.pos, this.camera);
+    this.fx.update(dt);
+    if (!this.mapOpen) {
+      this.player.update(dt, this.input, this.camera, null);
+      this.updateCamera(dt);
+      this.updateStationPrompt();
+      this.updateWorldHud(dt);
+    }
+  }
+
+  updateStationPrompt() {
+    if (this.state !== 'camp' || this.mapOpen) { this.ui.hideInteract(); this.nearStation = null; return; }
+    const s = this.world.nearestStation(this.player.pos, 3.4);
+    this.nearStation = s;
+    if (s) this.ui.showInteract(s.label, s.id === 'bed' ? 'rest until dawn' : 'interact');
+    else this.ui.hideInteract();
+  }
+
+  interactNearest() {
+    if (this.state !== 'camp') return;
+    const s = this.nearStation || this.world.nearestStation(this.player.pos, 3.4);
+    if (!s) {
+      this.ui.toast('Nothing to interact with. Follow a beacon.', 1.8);
+      return;
+    }
+    this.audio.ui();
+    if (s.id === 'bed') {
+      const clock = this.world.skipToMorning();
+      this.ui.toast(`Rested until dawn · Day ${this.world.dayCount} · ${clock.text}`, 2.8);
+      this.ui.flash('gold');
+      return;
+    }
+    // The menu screens replace the camp view; state returns to hub.
+    this.state = 'hub';
+    this.input.setEnabled(false);
+    this.input.exitPointerLock();
+    this.ui.showCampHud(false);
+    this.ui.hideInteract();
+    this.ui.applyTouchVisibility(false);
+    if (s.id === 'items') {
+      this.ui.showScreen('items');
+    } else {
+      this.ui.showScreen(s.screen || 'hub');
+    }
+  }
+
+  updateWorldHud(dt) {
+    this.worldHudTimer -= dt;
+    if (this.worldHudTimer > 0) return;
+    this.worldHudTimer = 0.1;
+    if (!this.player) return;
+    const clock = this.world.clock();
+    this.ui.updateWorldClock(clock, this.world.dayCount);
+    this.map.drawMinimap(
+      document.getElementById('minimap'),
+      { x: this.player.pos.x, z: this.player.pos.z },
+      this.player.facing
+    );
+  }
+
+  toggleMap() {
+    if (this.mapOpen) this.closeMap();
+    else this.openMap();
+  }
+
+  openMap() {
+    if (this.state !== 'camp' && this.state !== 'hub') {
+      if (this.state === 'hunt') this.ui.toast('Use the minimap during a hunt', 1.8);
+      return;
+    }
+    this.mapOpen = true;
+    this.mapReturnState = this.state;
+    if (this.state === 'camp') this.input.setEnabled(false);
+    this.ui.hideInteract();
+    this.ui.showCampHud(false);
+    this.ui.showScreen('map');
+    this.audio.ui();
+    requestAnimationFrame(() => this.drawMap());
+  }
+
+  closeMap() {
+    if (!this.mapOpen) return;
+    this.mapOpen = false;
+    this.ui.hideAllScreens();
+    if (this.mapReturnState === 'camp') {
+      this.state = 'camp';
+      this.ui.showScreen(null);
+      this.ui.applyTouchVisibility(true);
+      this.ui.showCampHud(true);
+      this.input.setEnabled(true);
+      this.input.reset();
+    } else {
+      this.state = 'hub';
+      this.ui.showScreen('hub');
+      this.ui.applyTouchVisibility(false);
+      this.ui.showCampHud(false);
+    }
+    this.audio.ui();
+  }
+
+  drawMap() {
+    if (!this.player) return;
+    const canvas = document.getElementById('full-map');
+    if (!canvas) return;
+    this.map.drawFullMap(canvas, { x: this.player.pos.x, z: this.player.pos.z }, this.player.facing);
+  }
+
+  setWaypointFromMap(event) {
+    const canvas = document.getElementById('full-map');
+    if (!canvas || !this.mapOpen) return;
+    const wp = this.map.setWaypointFromMap(canvas, event.clientX, event.clientY);
+    this.drawMap();
+    this.audio.ui();
+    this.ui.toast(`Waypoint set · ${Math.round(wp.x)}, ${Math.round(wp.z)}`, 1.8);
+  }
+
+  clearWaypoint() {
+    this.map.waypoint = null;
+    this.drawMap();
+    this.audio.ui();
+    this.ui.toast('Waypoint cleared', 1.4);
   }
 
   setPaused(v) {
@@ -582,8 +788,10 @@ export class Game {
     if (this.state === 'hunt') this.updateHunt(dt);
     else if (this.state === 'result') this.updateResult(dt);
     else if (this.state === 'pause') {
-      if (this.arena) this.arena.update(dt, this.time, this.player?.pos);
+      this.world.update(dt, this.time, this.player?.pos, this.camera);
       this.fx.update(dt);
+    } else if (this.state === 'camp') {
+      this.updateCamp(dt);
     } else {
       this.updateHub(dt);
     }
@@ -594,10 +802,12 @@ export class Game {
   updateHub(dt) {
     if (!this.arena || !this.player) return;
     this.hubTime += dt;
-    this.arena.update(dt, this.time, this.player.pos);
+    this.world.update(dt, this.time, this.player.pos, this.camera);
     this.player._animate(dt, null, this.camera, null);
     this.fx.update(dt);
-    const target = new THREE.Vector3(this.player.pos.x, 1.25, this.player.pos.z);
+    this.updateWorldHud(dt);
+    const groundY = this.player.root.position.y;
+    const target = new THREE.Vector3(this.player.pos.x, groundY + 1.25, this.player.pos.z);
     const yaw = 0.32 + Math.sin(this.time * 0.11) * 0.18;
     const pitch = 0.17;
     const dist = this.state === 'title' ? 6.4 : 7.2;
@@ -616,7 +826,7 @@ export class Game {
   updateHunt(dt) {
     if (!this.arena || !this.player || !this.monster) return;
     if (this.input.consume('lock')) this.toggleLock();
-    this.arena.update(dt, this.time, this.player.pos);
+    this.world.update(dt, this.time, this.player.pos, this.camera);
     this.fx.update(dt);
 
     if (this.intro > 0) {
@@ -680,7 +890,7 @@ export class Game {
   }
 
   updateResult(dt) {
-    if (this.arena) this.arena.update(dt, this.time, this.player?.pos);
+    this.world.update(dt, this.time, this.player?.pos, this.camera);
     this.fx.update(dt);
     if (this.monster) this.monster.update(dt, this.player || { pos: this.monster.pos });
     if (this.player) this.player._animate(dt, null, this.camera, null);
@@ -690,7 +900,7 @@ export class Game {
     if (this.player) center.add(this.player.pos);
     if (this.monster) center.add(this.monster.pos);
     center.multiplyScalar(this.monster && this.player ? 0.5 : 1);
-    center.y = 1.6;
+    center.y = (this.player?.root.position.y || 0) + 1.6;
     const yaw = t + 0.8;
     const dist = 11;
     const desired = new THREE.Vector3(
@@ -712,7 +922,7 @@ export class Game {
       const push = min - dist;
       this.player.pos.x += (dx / dist) * push;
       this.player.pos.z += (dz / dist) * push;
-      this.player.root.position.set(this.player.pos.x, 0, this.player.pos.z);
+      this.player.root.position.set(this.player.pos.x, this.player._groundAt(this.player.pos.x, this.player.pos.z), this.player.pos.z);
     }
   }
 
@@ -721,7 +931,8 @@ export class Game {
     const yaw = 2.7 * (1 - ease);
     const pitch = 0.08 + 0.2 * ease;
     const dist = 11 - 3 * ease;
-    const target = new THREE.Vector3(this.player.pos.x, 1.4, this.player.pos.z);
+    const groundY = this.player.root.position.y;
+    const target = new THREE.Vector3(this.player.pos.x, groundY + 1.4, this.player.pos.z);
     const mc = this.monster.center;
     const look = target.clone().lerp(mc, Math.sin(t * Math.PI) * 0.55);
     const desired = new THREE.Vector3(
@@ -746,15 +957,17 @@ export class Game {
       this.camYaw += angleDiff(desired, this.camYaw) * (1 - Math.exp(-dt * 4.5));
       this.camPitch += (0.3 - this.camPitch) * (1 - Math.exp(-dt * 2.5));
     }
-    const target = new THREE.Vector3(this.player.pos.x, 1.4, this.player.pos.z);
-    const dist = this.lockOn ? 9.4 : 7.8;
+    const groundY = this.player.root.position.y;
+    const target = new THREE.Vector3(this.player.pos.x, groundY + 1.4, this.player.pos.z);
+    const dist = this.lockOn ? 9.4 : (this.state === 'camp' ? 8.6 : 7.8);
     const cosP = Math.cos(this.camPitch);
     let desired = new THREE.Vector3(
       target.x + Math.sin(this.camYaw) * dist * cosP,
       target.y + 0.7 + Math.sin(this.camPitch) * dist,
       target.z + Math.cos(this.camYaw) * dist * cosP
     );
-    desired.y = Math.max(1.1, desired.y);
+    const minY = groundY + 1.1;
+    desired.y = Math.max(minY, desired.y);
     this.camera.position.lerp(desired, 1 - Math.exp(-dt * 11));
 
     // camera shake
@@ -790,6 +1003,7 @@ export class Game {
       brokenParts: m.parts.filter((pr) => pr.broken).map((pr) => ({ id: pr.id })),
       partsVersion: this.partsVersion,
     });
+    this.updateWorldHud(1 / 60);
   }
 
   hintControls() {
@@ -842,6 +1056,9 @@ export class Game {
     this.state = 'result';
     this.ui.showHuntHud(false);
     this.ui.applyTouchVisibility(false);
+    this.ui.showWorldHud(false);
+    this.ui.showCampHud(false);
+    this.ui.hideInteract();
     this.audio.stopMusic();
     if (won) this.audio.victory();
     else this.audio.defeat();

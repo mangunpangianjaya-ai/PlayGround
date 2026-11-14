@@ -257,7 +257,12 @@ export class Player {
   setPosition(p) {
     this.pos.copy(p);
     this.pos.y = 0;
-    this.root.position.copy(this.pos);
+    this.root.position.set(this.pos.x, this._groundAt(this.pos.x, this.pos.z), this.pos.z);
+  }
+
+  _groundAt(x, z) {
+    const h = this.game.arena?.heightAt?.(x, z);
+    return Number.isFinite(h) ? h : 0;
   }
 
   get center() {
@@ -408,7 +413,7 @@ export class Player {
         this._drainStamina(9 * dt);
       }
       if (sprinting && Math.random() < dt * 18) {
-        this.game.fx.dust(this._tmp2.set(this.pos.x, 0.1, this.pos.z), 1, 0x8d7f65);
+        this.game.fx.dust(this._tmp2.set(this.pos.x, this._groundAt(this.pos.x, this.pos.z) + 0.1, this.pos.z), 1, 0x8d7f65);
       }
       if (moving) {
         this.speedSmooth = damp(this.speedSmooth, speed, 14, dt);
@@ -494,10 +499,11 @@ export class Player {
 
   // ------------------------------------------------------------
   _move(dx, dz) {
+    const px = this.pos.x, pz = this.pos.z;
     this.pos.x += dx;
     this.pos.z += dz;
     const arena = this.game.arena;
-    const bounds = arena ? arena.bounds - 1.2 : 29;
+    const bounds = arena ? arena.bounds - 2 : 29;
     const d = Math.hypot(this.pos.x, this.pos.z);
     if (d > bounds) {
       this.pos.x = (this.pos.x / d) * bounds;
@@ -513,8 +519,13 @@ export class Player {
           this.pos.z = o.z + (dz2 / dist) * min;
         }
       }
+      // Rivers and the mountain rim are impassable; the bridge deck is safe.
+      if (arena.canTraverse && !arena.canTraverse(this.pos.x, this.pos.z)) {
+        this.pos.x = px;
+        this.pos.z = pz;
+      }
     }
-    this.root.position.set(this.pos.x, 0, this.pos.z);
+    this.root.position.set(this.pos.x, this._groundAt(this.pos.x, this.pos.z), this.pos.z);
   }
 
   _drainStamina(n) {
@@ -1064,7 +1075,7 @@ export class Player {
       this.weaponL.rotation.z = lerp(this.weaponL.rotation.z, pose.wLz, 1 - Math.exp(-dt * 22));
     }
     this.root.rotation.y = this.facing;
-    this.root.position.set(this.pos.x, 0, this.pos.z);
+    this.root.position.set(this.pos.x, this._groundAt(this.pos.x, this.pos.z), this.pos.z);
   }
 
   _attackPose(pose, dt) {

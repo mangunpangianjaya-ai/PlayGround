@@ -88,6 +88,18 @@ export class UI {
     this.toastEl = document.getElementById('toast');
     this.flashEl = document.getElementById('flash');
     this.fadeEl = document.getElementById('fade');
+    this.worldEls = {
+      root: document.getElementById('world-ui'),
+      phase: document.getElementById('world-phase'),
+      time: document.getElementById('world-time'),
+      day: document.getElementById('world-day'),
+      campMenu: document.getElementById('camp-menu'),
+      interact: document.getElementById('interact-prompt'),
+      interactLabel: document.getElementById('interact-label'),
+      interactHint: document.getElementById('interact-hint'),
+      minimap: document.getElementById('minimap'),
+      mapOpen: document.getElementById('map-open'),
+    };
     this.screenEls = [...document.querySelectorAll('.screen')];
     this._announceTimer = 0;
     this._subTimer = 0;
@@ -120,6 +132,17 @@ export class UI {
     document.getElementById('pause-btn')?.addEventListener('click', () => this.game.setPaused(true));
     document.getElementById('reset-save')?.addEventListener('click', () => this.game.resetProgress());
     document.getElementById('touch-lock')?.addEventListener('click', () => this.game.toggleLock());
+    document.getElementById('enter-camp')?.addEventListener('click', () => this.game.enterCamp());
+    document.getElementById('camp-menu')?.addEventListener('click', () => this.game.exitCamp());
+    document.getElementById('map-open')?.addEventListener('click', () => this.game.toggleMap());
+    document.getElementById('map-close')?.addEventListener('click', () => this.game.closeMap());
+    document.getElementById('map-clear')?.addEventListener('click', () => this.game.clearWaypoint());
+    document.getElementById('interact-prompt')?.addEventListener('click', () => this.game.interactNearest());
+    const fullMap = document.getElementById('full-map');
+    fullMap?.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.game.setWaypointFromMap(e);
+    });
 
     const questGrid = document.getElementById('quest-grid');
     questGrid?.addEventListener('click', (e) => {
@@ -195,6 +218,7 @@ export class UI {
     if (name === 'hub') this.refreshHub();
     if (name === 'quests') this.refreshQuests();
     if (name === 'smith') this.refreshSmith();
+    if (name === 'items') this.refreshItems();
     if (name === 'settings') this.refreshSettings();
   }
 
@@ -207,21 +231,59 @@ export class UI {
     this.huntEls.root.classList.toggle('hidden', !show);
   }
 
+  showWorldHud(show) {
+    this.worldEls.root.classList.toggle('hidden', !show);
+  }
+
+  showCampHud(show) {
+    this.worldEls.campMenu.classList.toggle('hidden', !show);
+  }
+
+  showInteract(label, hint) {
+    this.worldEls.interact.classList.remove('hidden');
+    this.worldEls.interactLabel.textContent = label;
+    this.worldEls.interactHint.textContent = hint || 'interact';
+  }
+
+  hideInteract() {
+    this.worldEls.interact.classList.add('hidden');
+  }
+
+  updateWorldClock(clock, dayCount) {
+    this.worldEls.time.textContent = clock.text;
+    this.worldEls.phase.textContent = clock.phase;
+    this.worldEls.day.textContent = `DAY ${dayCount}`;
+  }
+
+  refreshItems() {
+    const s = this.game.save;
+    document.getElementById('items-pill').textContent = `${Object.values(s.materials).reduce((a, b) => a + b, 0)} MATERIALS`;
+    const grid = document.getElementById('stash-grid');
+    if (!grid) return;
+    grid.innerHTML = Object.entries(MATERIALS).map(([id, mat]) => `
+      <div class="stash-row">
+        <span class="stash-dot" style="background:${matColor(id)}"></span>
+        <span>${mat.name}</span>
+        <b>${s.materials[id] || 0}</b>
+      </div>`).join('');
+  }
+
   applySettings() {
     const s = this.game.save.settings;
     document.body.classList.toggle('lefty', !!s.lefty);
     this.applyTouchVisibility();
   }
 
-  applyTouchVisibility(inHunt = this.game.state === 'hunt' || this.game.state === 'pause') {
+  applyTouchVisibility(inHunt = this.game.state === 'hunt' || this.game.state === 'pause' || this.game.state === 'camp') {
     const s = this.game.save.settings;
     let touch = s.touch;
     if (touch === null || touch === undefined) {
       touch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
     }
     this.huntEls.touch.classList.toggle('hidden', !(touch && inHunt));
-    document.body.classList.toggle('touch-mode', !!touch);
-    this.huntEls.cameraHint.classList.toggle('show', !touch && inHunt);
+    document.body.classList.toggle('touch-mode', !!(touch && inHunt));
+    const showCameraHint = !touch && this.game.state === 'hunt';
+    this.huntEls.cameraHint.classList.toggle('show', showCameraHint);
     this.huntEls.cameraHint.innerHTML = '<kbd>Click</kbd> to capture mouse · <kbd>F</kbd> lock on · drag to look';
     this.touchMode = touch;
   }

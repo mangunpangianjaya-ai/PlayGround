@@ -537,3 +537,133 @@ body.lefty .quest-label{text-align:left}
 @media (prefers-reduced-motion:reduce){
   *{transition-duration:.01ms!important;animation-duration:.01ms!important}
 }
+
+/* ============================================================
+   OPEN WORLD — camp HUD, minimap, map screen, item box
+   ============================================================ */
+#world-ui{position:absolute;inset:0;pointer-events:none;z-index:4}
+
+.minimap-wrap{
+  position:absolute;left:calc(18px + var(--safe-l));bottom:calc(18px + var(--safe-b));
+  width:142px;height:164px;pointer-events:none;filter:drop-shadow(0 8px 22px rgba(0,0,0,.42));
+}
+#minimap{display:block;width:142px;height:142px;border-radius:50%}
+.map-open-btn{
+  position:absolute;right:-3px;top:0;pointer-events:auto;display:flex;align-items:center;gap:3px;
+  border:1px solid rgba(232,180,90,.4);background:rgba(5,12,10,.82);color:var(--gold-hi);
+  border-radius:999px;padding:4px 8px 4px 6px;font-size:7px;letter-spacing:.16em;font-weight:800;cursor:pointer;
+  backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,.4)
+}
+.map-open-btn:hover{border-color:var(--gold-hi);background:rgba(30,24,10,.9)}
+.map-open-btn svg{width:11px;height:11px;stroke:var(--gold);fill:none;stroke-width:1.7}
+.minimap-clock{
+  display:flex;align-items:center;justify-content:space-between;gap:5px;height:22px;margin-top:-2px;
+  padding:0 8px;border:1px solid var(--line);border-radius:999px;background:rgba(5,12,10,.78);
+  backdrop-filter:blur(7px);font-size:7px;letter-spacing:.12em;color:#a9bbb3;font-weight:700
+}
+.minimap-clock b{font-family:var(--font-title);font-size:11px;letter-spacing:.06em;color:#f4efe2;font-weight:400}
+.minimap-clock #world-phase{color:var(--gold)}
+
+.camp-menu-btn{
+  position:absolute;top:calc(16px + env(safe-area-inset-top,0px));left:calc(18px + var(--safe-l));
+  pointer-events:auto;cursor:pointer;border:1px solid var(--line);background:rgba(5,12,10,.68);
+  color:#d5e0da;border-radius:7px;padding:9px 13px;font:700 9px/1 var(--font-body);letter-spacing:.18em;
+  backdrop-filter:blur(8px);box-shadow:0 6px 20px rgba(0,0,0,.35)
+}
+.camp-menu-btn:hover{border-color:var(--gold);color:var(--gold-hi)}
+
+.interact-prompt{
+  position:absolute;left:50%;bottom:calc(196px + var(--safe-b));transform:translateX(-50%);
+  pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:9px;text-align:left;
+  border:1px solid rgba(232,180,90,.5);background:rgba(6,14,11,.88);border-radius:10px;
+  padding:9px 14px 9px 10px;color:#eef3ee;backdrop-filter:blur(10px);
+  box-shadow:0 10px 30px rgba(0,0,0,.45),0 0 24px rgba(232,180,90,.1);animation:promptIn .18s ease-out
+}
+.interact-prompt kbd{font-size:11px;padding:5px 7px;border-color:rgba(232,180,90,.45);color:var(--gold-hi);background:rgba(232,180,90,.1)}
+.interact-prompt span{display:flex;flex-direction:column;gap:1px}
+.interact-prompt b{font-size:11px;letter-spacing:.08em;font-weight:700}
+.interact-prompt small{font-size:8px;letter-spacing:.14em;color:#9fb0a9;text-transform:uppercase}
+@keyframes promptIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* full map */
+.map-screen{
+  padding:clamp(14px,2.6vw,28px);gap:12px;
+  background:radial-gradient(ellipse at 50% 45%,rgba(8,20,16,.38),rgba(3,8,7,.94) 76%),rgba(3,8,7,.55);
+  backdrop-filter:blur(6px)
+}
+.map-frame{flex:1;min-height:0;display:grid;place-items:center;padding:4px}
+#full-map{
+  width:min(74vh,92vw);height:min(74vh,92vw);max-width:100%;max-height:100%;
+  border-radius:16px;border:1px solid rgba(232,180,90,.35);background:#0a1512;cursor:crosshair;
+  box-shadow:0 24px 70px rgba(0,0,0,.55),0 0 0 6px rgba(232,180,90,.04)
+}
+.map-foot{justify-content:space-between;align-items:center;gap:12px}
+.map-foot .btn{padding:9px 14px;font-size:9px}
+
+/* item box */
+.items-wrap{display:grid;grid-template-columns:minmax(210px,300px) minmax(0,520px);gap:16px;justify-content:center;align-items:start;padding:12px 4px}
+.item-card{padding:22px}
+.item-card h3{font-family:var(--font-title);font-weight:400;font-size:23px;margin:8px 0 8px}
+.item-big-icon{width:54px;height:54px;border:1px solid rgba(232,180,90,.4);border-radius:12px;display:grid;place-items:center;background:rgba(232,180,90,.06)}
+.item-big-icon svg{width:28px;height:28px;stroke:var(--gold);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.item-count-row{display:flex;align-items:baseline;gap:8px;margin-top:16px}
+.item-count-row b{font-family:var(--font-title);font-size:40px;color:var(--gold-hi);font-weight:400;line-height:1}
+.item-count-row span{font-size:8px;letter-spacing:.2em;color:#93a69e;font-weight:700}
+.stash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.stash-row{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:7px;padding:9px 10px;font-size:10px;color:#cbd8d1}
+.stash-row b{margin-left:auto;font-size:13px;color:var(--gold-hi)}
+.stash-dot{width:9px;height:9px;border-radius:50%;flex:none;box-shadow:0 0 8px currentColor}
+
+/* ============ HUD spacing / touch fixes ============ */
+.hud-player{max-width:36vw}
+.hud-bars{width:min(250px,30vw)}
+.hud-monster{width:min(520px,40vw)}
+.hud-lock{top:calc(92px + env(safe-area-inset-top,0px));bottom:auto;padding:3px 8px;border:1px solid rgba(232,180,90,.22);border-radius:999px;background:rgba(5,12,10,.45)}
+.hud-lock.hidden{display:none!important}
+
+@media (max-width:980px){
+  .hud-player{top:calc(12px + env(safe-area-inset-top,0px));max-width:46vw}
+  .hud-bars{width:min(230px,34vw)}
+  .hud-monster{top:calc(82px + env(safe-area-inset-top,0px));width:min(72vw,470px)}
+  .hud-quest{top:calc(12px + env(safe-area-inset-top,0px))}
+  .hud-lock{top:calc(150px + env(safe-area-inset-top,0px))}
+  .items-wrap{grid-template-columns:1fr;max-width:520px;margin:0 auto;width:100%;overflow-y:auto}
+}
+@media (max-width:620px){
+  .hud-player{top:calc(10px + env(safe-area-inset-top,0px));max-width:58vw}
+  .hud-bars{width:44vw}
+  .hud-monster{top:calc(64px + env(safe-area-inset-top,0px));width:78vw}
+  .hud-quest{top:calc(10px + env(safe-area-inset-top,0px))}
+  .hud-lock{top:calc(132px + env(safe-area-inset-top,0px))}
+  .minimap-wrap{width:118px;height:140px}
+  #minimap{width:118px;height:118px}
+  .map-foot{flex-direction:column}
+  .map-foot .btn{width:100%}
+  .stash-grid{grid-template-columns:1fr}
+}
+@media (max-width:520px) and (orientation:portrait){
+  .minimap-wrap{left:auto;right:calc(10px + var(--safe-r));bottom:calc(284px + var(--safe-b));width:104px;height:126px}
+  #minimap{width:104px;height:104px}
+}
+body.touch-mode .minimap-wrap{
+  left:auto;right:calc(10px + var(--safe-r));bottom:calc(286px + var(--safe-b));
+  width:106px;height:128px
+}
+body.touch-mode #minimap{width:106px;height:106px}
+body.touch-mode .interact-prompt{bottom:calc(318px + var(--safe-b))}
+body.touch-mode .camp-menu-btn{top:calc(10px + env(safe-area-inset-top,0px))}
+body.lefty .minimap-wrap{left:calc(18px + var(--safe-l));right:auto}
+body.lefty .camp-menu-btn{left:auto;right:calc(18px + var(--safe-r))}
+
+@media (max-height:520px) and (orientation:landscape){
+  .hud-monster{top:10px!important;width:42vw!important}
+  .hud-player{top:10px!important}
+  .hud-quest{top:10px!important}
+  .hud-lock{display:none!important}
+  .interact-prompt{bottom:calc(120px + var(--safe-b))!important}
+  .minimap-wrap{width:100px!important;height:120px!important;bottom:calc(12px + var(--safe-b))!important}
+  #minimap{width:100px!important;height:100px!important}
+  .map-frame{padding:0}
+  #full-map{width:min(62vh,90vw);height:min(62vh,90vw)}
+}
+

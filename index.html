@@ -56,9 +56,14 @@
         <div class="hub-menu">
           <div class="hub-tag">HUNTER'S REST</div>
           <h2 class="hub-title">Where will<br />the trail lead?</h2>
+          <button class="menu-btn camp-entry" id="enter-camp">
+            <span class="mb-icon" data-icon="camp"></span>
+            <span class="mb-text"><b>Explore Camp</b><small>Walk the frontier · stations · map</small></span>
+            <span class="mb-arrow">›</span>
+          </button>
           <button class="menu-btn primary" data-nav="quests">
             <span class="mb-icon" data-icon="map"></span>
-            <span class="mb-text"><b>Quest Board</b><small>Three beasts. Three arenas.</small></span>
+            <span class="mb-text"><b>Quest Board</b><small>Three beasts. One frontier.</small></span>
             <span class="mb-arrow">›</span>
           </button>
           <button class="menu-btn" data-nav="smith">
@@ -75,8 +80,8 @@
         </div>
       </div>
       <footer class="hub-footer">
-        <span class="ctrl-hint"><kbd>WASD</kbd> move · <kbd>LMB</kbd> attack · <kbd>RMB</kbd> special · <kbd>Space</kbd> dodge · <kbd>F</kbd> lock-on · <kbd>E</kbd> potion</span>
-        <span class="touch-note">Touch controls appear during a hunt.</span>
+        <span class="ctrl-hint"><kbd>WASD</kbd> move · <kbd>Shift</kbd> sprint · <kbd>E</kbd> interact · <kbd>M</kbd> map · <kbd>F</kbd> lock-on</span>
+        <span class="touch-note">Explore camp, then take a quest from the board.</span>
       </footer>
     </section>
 
@@ -116,6 +121,31 @@
         </aside>
       </div>
       <div class="panel-foot"><span class="muted">Upgrades raise raw damage on every weapon in your arsenal.</span></div>
+    </section>
+
+    <!-- ============ ITEM BOX ============ -->
+    <section id="screen-items" class="screen panel-screen hidden">
+      <header class="panel-head">
+        <button class="back-btn" data-nav="hub">‹ <span>Hub</span></button>
+        <div>
+          <div class="card-eyebrow">CAMP SUPPLIES</div>
+          <h2>Item Box</h2>
+        </div>
+        <div class="material-pill" id="items-pill"></div>
+      </header>
+      <div class="items-wrap">
+        <div class="settings-card glass item-card">
+          <div class="item-big-icon" data-icon="potion"></div>
+          <h3>Hunt Potions</h3>
+          <p class="muted small">Three potions are packed for every hunt. They refill automatically when a new quest begins.</p>
+          <div class="item-count-row"><b>3</b><span>PER HUNT</span></div>
+        </div>
+        <div class="settings-card glass item-card">
+          <h3>Material Stash</h3>
+          <div class="stash-grid" id="stash-grid"></div>
+        </div>
+      </div>
+      <div class="panel-foot"><span class="muted">The blacksmith turns materials into stronger weapons and skins.</span></div>
     </section>
 
     <!-- ============ SETTINGS ============ -->
@@ -174,6 +204,25 @@
         </div>
       </div>
       <div class="panel-foot"><span class="muted">Esc pauses a hunt on keyboard.</span></div>
+    </section>
+
+    <!-- ============ FRONTIER MAP ============ -->
+    <section id="screen-map" class="screen map-screen hidden">
+      <header class="panel-head">
+        <button class="back-btn" id="map-close">‹ <span>Back</span></button>
+        <div>
+          <div class="card-eyebrow">VERDANT FRONTIER</div>
+          <h2>World Map</h2>
+        </div>
+        <div class="material-pill" id="map-legend">● CAMP · ▲ LAIR</div>
+      </header>
+      <div class="map-frame">
+        <canvas id="full-map" aria-label="Frontier map"></canvas>
+      </div>
+      <div class="panel-foot map-foot">
+        <span class="muted">Click or tap the map to drop a waypoint. The minimap keeps pointing toward it.</span>
+        <button class="btn ghost" id="map-clear">CLEAR WAYPOINT</button>
+      </div>
     </section>
 
     <!-- ============ RESULT ============ -->
@@ -243,6 +292,26 @@
       <div class="camera-hint" id="camera-hint">Drag to look · <kbd>F</kbd> lock on</div>
     </div>
 
+    <!-- ============ OPEN WORLD HUD ============ -->
+    <div id="world-ui" class="hidden">
+      <button id="camp-menu" class="camp-menu-btn hidden" aria-label="Camp menu">‹ CAMP MENU</button>
+      <div class="minimap-wrap" id="minimap-wrap">
+        <canvas id="minimap" aria-label="Minimap"></canvas>
+        <button id="map-open" class="map-open-btn" aria-label="Open world map">
+          <span data-icon="map"></span><b>MAP</b>
+        </button>
+        <div class="minimap-clock">
+          <span id="world-phase">DAY</span>
+          <b id="world-time">08:15</b>
+          <span id="world-day">DAY 1</span>
+        </div>
+      </div>
+      <button id="interact-prompt" class="interact-prompt hidden">
+        <kbd>E</kbd>
+        <span><b id="interact-label">Quest Board</b><small id="interact-hint">interact</small></span>
+      </button>
+    </div>
+
     <!-- ============ PAUSE ============ -->
     <section id="screen-pause" class="screen pause-screen hidden">
       <div class="pause-card glass">
@@ -301,6 +370,7 @@
   <symbol id="i-potion" viewBox="0 0 24 24"><path d="M9 2h6v3l-1 1v3.2c2.4 1 4 3.2 4 5.8a6 6 0 0 1-12 0c0-2.6 1.6-4.8 4-5.8V6L9 5Z"/><path d="M6.5 14h11"/><path d="M10 10.5v-2h4v2"/></symbol>
   <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 5.5 9 3l6 2.5L21 3v15.5L15 21l-6-2.5L3 21Z"/><path d="M9 3v15.5M15 5.5V21"/><circle cx="12" cy="10" r="1.6"/></symbol>
+  <symbol id="i-camp" viewBox="0 0 24 24"><path d="M12 3 21 21H3Z"/><path d="M12 10 16.5 21M12 10 7.5 21"/><path d="M8.5 21 12 13l3.5 8"/></symbol>
   <symbol id="i-anvil" viewBox="0 0 24 24"><path d="M4 6h11l1.5 3H23l-3 3.5h-3L15 17h4v3H4v-3h4l-1-6H4Z"/><path d="M9 6V3h5v3"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></symbol>
   <symbol id="i-helm" viewBox="0 0 24 24"><path d="M5 20v-8a7 7 0 0 1 14 0v8l-3-2-4 2-4-2Z"/><path d="M8 12h8"/><path d="M9 4.5 8 1M15 4.5 16 1"/></symbol>

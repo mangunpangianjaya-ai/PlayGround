@@ -780,7 +780,7 @@ export class Monster {
       if (this.footstep > (this.enraged ? 0.34 : 0.46)) {
         this.footstep = 0;
         this.game.audio.monsterStep(0, this.id === 'icebehemoth');
-        this.game.fx.dust(new THREE.Vector3(this.pos.x, 0.1, this.pos.z), 2, this.id === 'ice' ? 0xccdde6 : 0x8f8168);
+        this.game.fx.dust(new THREE.Vector3(this.pos.x, this._groundAt(this.pos.x, this.pos.z) + 0.1, this.pos.z), 2, this.id === 'ice' ? 0xccdde6 : 0x8f8168);
       }
     } else {
       this.walkPhase += dt * 1.2;
@@ -801,6 +801,7 @@ export class Monster {
   }
 
   _move(dx, dz) {
+    const px = this.pos.x, pz = this.pos.z;
     this.pos.x += dx;
     this.pos.z += dz;
     const arena = this.game.arena;
@@ -819,7 +820,16 @@ export class Monster {
         this.pos.z = o.z + (dz2 / dist) * min;
       }
     }
-    this.root.position.set(this.pos.x, 0, this.pos.z);
+    if (arena.canTraverse && !arena.canTraverse(this.pos.x, this.pos.z)) {
+      this.pos.x = px;
+      this.pos.z = pz;
+    }
+    this.root.position.set(this.pos.x, this._groundAt(this.pos.x, this.pos.z), this.pos.z);
+  }
+
+  _groundAt(x, z) {
+    const h = this.game.arena?.heightAt?.(x, z);
+    return Number.isFinite(h) ? h : 0;
   }
 
   _chase(dt, player, dist, ang) {
@@ -964,7 +974,7 @@ export class Monster {
         const k = 1 - Math.exp(-dt * 3.5);
         this.pos.x = lerp(this.pos.x, a.target.x, k);
         this.pos.z = lerp(this.pos.z, a.target.z, k);
-        this.root.position.set(this.pos.x, 0, this.pos.z);
+        this.root.position.set(this.pos.x, this._groundAt(this.pos.x, this.pos.z), this.pos.z);
         if (this.telegraph) this.telegraph.mesh.position.set(this.pos.x, 0.045, this.pos.z);
       }
       if (Math.random() < dt * 20) this.game.fx.burst(this._mouthPos(), 0xff8a3a, 2, 1.5, 1, { life: 0.5, gravity: -2 });
@@ -1369,7 +1379,7 @@ export class Monster {
       this.game.fx.burst(new THREE.Vector3(this.pos.x + rng(-1, 1), rng(1.5, 3.5), this.pos.z + rng(-1, 1)), 0xff6a2a, 1, 1.2, 1, { life: 0.7, gravity: -1.5 });
     }
 
-    this.root.position.set(this.pos.x, 0, this.pos.z);
+    this.root.position.set(this.pos.x, this._groundAt(this.pos.x, this.pos.z), this.pos.z);
     this.root.rotation.y = this.yaw;
   }
 
