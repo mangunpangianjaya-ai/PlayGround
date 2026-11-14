@@ -1,32 +1,49 @@
 /* ============================================================
    Aetherbound — Shards of Dawn
-   Stage 1 entry point: renderer, Sunlit Meadow test environment,
-   third-person camera, fixed-step player, HUD, menus and audio.
-
-   Later stages (ruins / crystal / sky zones, enemies, bosses)
-   are intentionally not activated here. See WORLD_ZONES below.
+   Entry point: renderer, four connected realms, third-person
+   camera, fixed-step player, enemies, bosses, HUD, menus, audio
+   and persistent progression.
    ============================================================ */
 import * as THREE from 'three';
 import { Environment, QUALITY } from './Environment.js';
 import { Input } from './Input.js';
-import { World } from './World.js';
+import { World, ZONES } from './World.js';
 import { Effects } from './Effects.js';
 import { Player } from './Player.js';
 import { AudioManager } from './Audio.js';
+import { EnemySystem, ProjectileSystem } from './Enemies.js';
+import { createBoss, disposeBoss } from './Bosses.js';
 import { clamp, damp, formatTime, makeGlowSprite, makeRadialTexture } from './Utils.js';
 
 const WISP_GLOW = makeRadialTexture(96, 'rgba(255,255,255,1)', 'rgba(255,255,255,0)', 0.16);
 
-/* ------------------------------------------------------------
-   Scope gate — Stage 1 only builds the meadow. The other three
-   zone builders already exist, but stay off until approved.
-   ------------------------------------------------------------ */
-const WORLD_ZONES = ['meadow'];
+/* All four realms are live. The road between them is gated by
+   each realm's warden. */
+const WORLD_ZONES = ['meadow', 'ruins', 'crystal', 'sky'];
+const ZONE_ORDER = WORLD_ZONES;
 
 const STEP = 1 / 120;
 const SAVE_KEY = 'aetherbound.stage1.save.v1';
 const PREFS_KEY = 'aetherbound.prefs.v1';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
+
+const ZONE_SPAWN = {
+  meadow: new THREE.Vector3(0, 0.08, 9),
+  ruins: new THREE.Vector3(0, 2.45, -66),
+  crystal: new THREE.Vector3(0, -23.95, -146),
+  sky: new THREE.Vector3(0, 44.08, -74),
+};
+
+const TRAVEL_SPAWN = {
+  'meadow>ruins': new THREE.Vector3(0, 2.45, -66),
+  'ruins>meadow': new THREE.Vector3(0, 0.08, -50),
+  'ruins>crystal': new THREE.Vector3(0, -23.95, -146),
+  'crystal>ruins': new THREE.Vector3(0, 2.45, -118),
+  'crystal>sky': new THREE.Vector3(0, 44.08, -74),
+  'sky>crystal': new THREE.Vector3(0, -23.95, -196),
+};
+
+const EMPTY_BOSSES = () => ({ meadow: false, ruins: false, crystal: false, sky: false });
 
 const DEFAULTS = {
   quality: 'high',
@@ -75,9 +92,13 @@ function saveJSON(key, value) {
   }
 }
 
+function isValidSave(data) {
+  return !!data && Number.isFinite(Number(data.v)) && Number(data.v) >= 1;
+}
+
 /* ============================================================
-   Training wisp — a small Stage 1 attack target. These are not
-   enemies; they simply prove the combo, hit sparks and lock-on.
+   Training wisp — a small practice target near the Dawn Shrine.
+   These are not enemies; they simply prove the combo and lock-on.
    ============================================================ */
 class TrainingWisp {
   constructor(scene, position, { color = 0xffd98a, phase = 0 } = {}) {
@@ -200,7 +221,14 @@ class Game {
     this.camDistance = 7.0;
     this.baseFov = 58;
 
+    this.zone = 'meadow';
     this.respawn = new THREE.Vector3(0, 0.08, 9);
+    this.respawnZone = 'meadow';
+    this.bossesDefeated = EMPTY_BOSSES();
+    this.boss = null;
+    this.transitioning = false;
+    this.hitStop = 0;
+    this.kills = 0;
     this.lastHp = -1;
     this.gemCount = 0;
     this.lockTarget = null;
@@ -210,9 +238,11 @@ class Game {
     this.returnScreen = 'menu';
     this.screenReturn = null;
     this.hintTimer = 0;
-    this.lastInteract = false;
+    this.lastInteract = null;
+    this.lastPrompt = '';
     this.saveDirty = false;
     this.saveClock = 0;
+    this.victoryDelay = 0;
 
     this.loop = this.loop.bind(this);
   }
@@ -253,7 +283,8 @@ class Game {
       await nextFrame();
 
       this.player = new Player(this.scene, this.world, this.effects, this.makeCallbacks());
-      this.createTrainingWisps();
+      this.projectiles = new ProjectileSystem(this.scene, this.effects, this);
+      this.enemies = new EnemySystem(this);
 
       // Gentle camera-side fill so the character reads against the sunlit grass.
       this.playerLight = new THREE.PointLight(0xfff0d8, 7, 8.5, 2);
@@ -269,10 +300,11 @@ class Game {
       this.buildHearts();
 
       const saved = loadJSON(SAVE_KEY);
-      if (saved && saved.v === SAVE_VERSION) this.applySave(saved);
+      if (isValidSave(saved)) this.applySave(saved);
 
       this.$('#gem-total').textContent = `/ ${this.world.gems.length}`;
       this.updateGemHud();
+      this.updateProgressionUi();
 
       this.progress(93, 'Tuning the light…');
       await nextFrame();
@@ -392,6 +424,8 @@ class Game {
     click('#btn-go-menu', () => this.quitToMenu(true));
     click('#btn-hud-pause', () => this.pause());
     click('#btn-reset-save', () => this.resetSave());
+    click('#btn-keep-playing', () => this.keepPlaying());
+    click('#btn-victory-menu', () => this.quitToMenu(true));
 
     document.querySelectorAll('[data-close]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -554,6 +588,11 @@ class Game {
     if (el) el.classList.remove('visible');
   }
 
+  setTouchVisible(visible) {
+    const el = this.$('#touch');
+    if (el) el.style.display = visible ? '' : 'none';
+  }
+
   openMenu() {
     this.state = 'menu';
     this.input.enabled = false;
@@ -563,7 +602,7 @@ class Game {
     this.hideScreen('controls');
     this.hideScreen('victory');
     this.$('#hud').classList.remove('visible');
-    this.$('#touch').style.display = '';
+    this.setTouchVisible(false);
     this.showScreen('menu');
     this.menuTime = 0;
     this.updateMenuCamera(0, true);
@@ -599,9 +638,16 @@ class Game {
     if (fresh) {
       this.clearSave();
       this.resetWorldProgress();
+      this.respawn.copy(ZONE_SPAWN.meadow);
+      this.respawnZone = 'meadow';
     } else {
       const saved = loadJSON(SAVE_KEY);
-      if (saved && saved.v === SAVE_VERSION) this.applySave(saved);
+      if (isValidSave(saved)) this.applySave(saved);
+      else {
+        this.resetWorldProgress();
+        this.respawn.copy(ZONE_SPAWN.meadow);
+        this.respawnZone = 'meadow';
+      }
     }
 
     this.hideScreen('menu');
@@ -609,7 +655,9 @@ class Game {
     this.hideScreen('controls');
     this.hideScreen('pause');
     this.hideScreen('gameover');
+    this.hideScreen('victory');
     this.$('#hud').classList.add('visible');
+    this.setTouchVisible(true);
     this.$('#lockhint').style.display = '';
 
     this.state = 'playing';
@@ -617,22 +665,115 @@ class Game {
     this.input.pressed.clear();
     this.input.attackHeld = false;
     this.playTime = savedTimeOr(this, 0);
-    this.player.reset(this.respawn.clone(), Math.PI);
-    this.player.time = 0;
+    this.transitioning = false;
+    this.victoryDelay = 0;
 
-    this.camYaw = 0;
-    this.camPitch = 0.21;
-    this.camDistance = 7.0;
-    this.updateCamera(1 / 60, true);
+    this.enterZone(this.zone, {
+      spawn: this.respawn.clone(),
+      announce: false,
+      instant: true,
+    });
 
-    this.showZoneCard();
+    this.playTime = savedTimeOr(this, 0);
+    this.showZoneCard(this.zone);
     this.updateGemHud();
     this.updateHearts(true);
-    this.toast('Stage 1 · Sunlit Meadow', '✦');
+    this.toast(`${ZONES[this.zone].name} · ${ZONES[this.zone].sub}`, '✦');
     this.sfx('checkpoint');
 
     if (!this.input.isTouchDevice) this.input.requestLock();
     this.hintTimer = 8;
+  }
+
+  /* ----------------------------------------------------------
+     Realm entry & travel
+     ---------------------------------------------------------- */
+  enterZone(zone, { spawn = null, announce = false, instant = true } = {}) {
+    if (!ZONES[zone]) zone = 'meadow';
+    this.zone = zone;
+
+    this.env.setZone(zone, instant);
+    this.effects.setZone(zone);
+    this.audio?.setZone(zone);
+
+    this.jumpClearFx();
+    this.enemies.load(zone);
+    this.clearBoss();
+    if (!this.bossesDefeated[zone]) this.spawnBossForZone(zone);
+
+    const pos = (spawn || ZONE_SPAWN[zone]).clone();
+    this.respawn.copy(pos);
+    this.respawnZone = zone;
+    this.player.reset(pos, Math.PI);
+    this.player.time = 0;
+    this.camYaw = 0;
+    this.camPitch = 0.21;
+    this.camDistance = 7.0;
+    this.lockTarget = null;
+    this.updateCamera(1 / 60, true);
+    this.updateProgressionUi();
+    this.updateGemHud();
+    this.updateHearts(true);
+    this.lastInteract = null;
+    this.lastPrompt = '';
+
+    if (announce) {
+      this.showZoneCard(zone);
+      this.toast(`${ZONES[zone].name} · ${ZONES[zone].sub}`, '✦');
+      this.sfx('portal');
+    }
+  }
+
+  jumpClearFx() {
+    this.projectiles?.clear();
+  }
+
+  spawnBossForZone(zone) {
+    const spec = this.world.bossSpawns[zone];
+    if (!spec || this.bossesDefeated[zone]) return;
+    this.boss = createBoss(this, spec);
+  }
+
+  clearBoss() {
+    if (this.boss) {
+      disposeBoss(this.boss);
+      this.boss = null;
+    }
+    this.$('#bossbar')?.classList.remove('visible');
+  }
+
+  travelToZone(target) {
+    if (this.transitioning || this.state !== 'playing') return;
+    if (!ZONES[target]) return;
+    const source = this.zone;
+    this.transitioning = true;
+    this.input.enabled = false;
+    this.player.velocity.set(0, 0, 0);
+    this.player.attacking = false;
+    this.$('#bossbar').classList.remove('visible');
+    this.$('#interact')?.classList.remove('visible');
+    this.sfx('portal');
+
+    const fade = $('#fade');
+    fade.classList.add('black');
+    setTimeout(() => {
+      if (this.state !== 'playing') {
+        this.transitioning = false;
+        fade.classList.remove('black');
+        return;
+      }
+      const key = `${source}>${target}`;
+      const pos = (TRAVEL_SPAWN[key] || ZONE_SPAWN[target]).clone();
+      this.enterZone(target, { spawn: pos, announce: true, instant: true });
+      this.saveProgress();
+      setTimeout(() => {
+        fade.classList.remove('black');
+        this.transitioning = false;
+        this.input.enabled = true;
+        this.input.pressed.clear();
+        if (!this.input.isTouchDevice) this.input.requestLock();
+      }, 220);
+    }, 320);
   }
 
   pause() {
@@ -641,6 +782,7 @@ class Game {
     this.input.enabled = false;
     this.input.pressed.clear();
     this.input.exitLock();
+    this.setTouchVisible(false);
     this.hideScreen('settings');
     this.hideScreen('controls');
     this.showScreen('pause');
@@ -654,6 +796,7 @@ class Game {
     this.state = 'playing';
     this.input.enabled = true;
     this.input.pressed.clear();
+    this.setTouchVisible(true);
     this.hintTimer = 0;
     if (!this.input.isTouchDevice) this.input.requestLock();
   }
@@ -664,8 +807,12 @@ class Game {
     this.hideScreen('pause');
     this.hideScreen('settings');
     this.hideScreen('controls');
-    if (!fromDeath) this.hideScreen('gameover');
+    this.hideScreen('victory');
+    this.hideScreen('gameover');
     this.$('#hud').classList.remove('visible');
+    this.enemies?.clear();
+    this.projectiles?.clear();
+    this.clearBoss();
     this.player?.reset(this.respawn.clone(), Math.PI);
     this.state = 'menu';
     this.openMenu();
@@ -676,12 +823,14 @@ class Game {
     this.state = 'dead';
     this.input.enabled = false;
     this.input.exitLock();
+    this.setTouchVisible(false);
+    this.$('#bossbar').classList.remove('visible');
     this.sfx('death');
     this.effects.addShake(0.4, 0.5);
     setTimeout(() => {
       if (this.state !== 'dead') return;
       this.$('#go-shards').textContent = String(this.gemCount);
-      this.$('#go-zone').textContent = 'Sunlit Meadow';
+      this.$('#go-zone').textContent = ZONES[this.zone].name;
       this.$('#go-time').textContent = formatTime(this.playTime);
       this.showScreen('gameover');
       this.$('#hud').classList.remove('visible');
@@ -691,11 +840,18 @@ class Game {
   respawnPlayer() {
     this.hideScreen('gameover');
     this.$('#hud').classList.add('visible');
+    this.setTouchVisible(true);
+    this.updateHearts(true);
+    this.enemies?.load(this.zone);
+    this.projectiles?.clear();
+    this.clearBoss();
+    if (!this.bossesDefeated[this.zone]) this.spawnBossForZone(this.zone);
     this.player.reset(this.respawn.clone(), Math.PI);
     this.camYaw = 0;
     this.camPitch = 0.21;
     this.updateCamera(1 / 60, true);
-    this.updateHearts(true);
+    this.updateProgressionUi();
+    this.updateGemHud();
     this.state = 'playing';
     this.input.enabled = true;
     this.input.pressed.clear();
@@ -709,16 +865,62 @@ class Game {
     setTimeout(() => fade.classList.remove('black'), 260);
   }
 
+  keepPlaying() {
+    this.hideScreen('victory');
+    this.$('#hud').classList.add('visible');
+    this.setTouchVisible(true);
+    this.state = 'playing';
+    this.input.enabled = true;
+    this.input.pressed.clear();
+    this.updateProgressionUi();
+    if (!this.input.isTouchDevice) this.input.requestLock();
+  }
+
+  showVictory() {
+    if (this.state !== 'playing') return;
+    this.victoryDelay = 0;
+    this.state = 'victory';
+    this.input.enabled = false;
+    this.input.exitLock();
+    this.setTouchVisible(false);
+    this.$('#bossbar').classList.remove('visible');
+    this.$('#vi-shards').textContent = String(this.gemCount);
+    this.$('#vi-bosses').textContent = `${ZONE_ORDER.filter((z) => this.bossesDefeated[z]).length}/4`;
+    this.$('#vi-time').textContent = formatTime(this.playTime);
+    this.$('#hud').classList.remove('visible');
+    this.$('#interact').classList.remove('visible');
+    this.showScreen('victory');
+    this.saveProgress();
+  }
+
   /* ----------------------------------------------------------
      Progress / save
      ---------------------------------------------------------- */
   resetWorldProgress() {
     this.world.gems.forEach((g) => g.restore());
     this.world.checkpoints.forEach((c) => c.reset());
+    this.world.setGateOpen('meadow', false, true);
+    this.bossesDefeated = EMPTY_BOSSES();
+    this.victoryDelay = 0;
+    this.syncProgressionWorld(true);
     this.gemCount = 0;
-    this.respawn.set(0, 0.08, 9);
+    this.zone = 'meadow';
+    this.respawn.copy(ZONE_SPAWN.meadow);
+    this.respawnZone = 'meadow';
+    this.clearBoss();
+    this.enemies?.clear();
+    this.projectiles?.clear();
     this.player?.healFull();
     this.updateGemHud();
+    this.updateProgressionUi();
+  }
+
+  syncProgressionWorld(instant = true) {
+    this.world.setGateOpen('meadow', !!this.bossesDefeated.meadow, instant);
+    for (const portal of this.world.portals) {
+      if (portal.id === 'portal_crystal') portal.setUnlocked(!!this.bossesDefeated.ruins, instant);
+      if (portal.id === 'portal_sky') portal.setUnlocked(!!this.bossesDefeated.crystal, instant);
+    }
   }
 
   applySave(data) {
@@ -731,19 +933,30 @@ class Game {
       const ids = new Set(data.checkpoints);
       this.world.checkpoints.forEach((c) => { if (ids.has(c.id)) c.activate(); });
     }
+    this.zone = ZONES[data.zone] ? data.zone : 'meadow';
+    this.bossesDefeated = { ...EMPTY_BOSSES(), ...(data.bosses || {}) };
+    this.syncProgressionWorld(true);
+
     if (data.respawn && Number.isFinite(data.respawn.x)) {
       this.respawn.set(data.respawn.x, data.respawn.y, data.respawn.z);
+    } else {
+      this.respawn.copy(ZONE_SPAWN[this.zone]);
     }
+    this.respawnZone = ZONES[data.respawnZone] ? data.respawnZone : this.zone;
     this.gemCount = this.world.gems.filter((g) => g.collected).length;
     this.savedTime = Number.isFinite(data.time) ? data.time : 0;
     if (this.player) this.player.position.copy(this.respawn);
     this.updateGemHud();
+    this.updateProgressionUi();
   }
 
   saveProgress() {
     if (!this.world) return;
     const data = {
       v: SAVE_VERSION,
+      zone: this.zone,
+      respawnZone: this.respawnZone,
+      bosses: { ...this.bossesDefeated },
       gems: this.world.gems.filter((g) => g.collected).map((g) => g.id),
       checkpoints: this.world.checkpoints.filter((c) => c.activated).map((c) => c.id),
       respawn: { x: this.respawn.x, y: this.respawn.y, z: this.respawn.z },
@@ -751,6 +964,7 @@ class Game {
       savedAt: Date.now(),
     };
     saveJSON(SAVE_KEY, data);
+    this.saveDirty = false;
     if (this.prefs) this.savePrefs();
   }
 
@@ -762,7 +976,9 @@ class Game {
   resetSave() {
     this.clearSave();
     this.resetWorldProgress();
-    this.player?.reset(this.respawn.clone(), Math.PI);
+    this.playTime = 0;
+    this.saveClock = 0;
+    this.enterZone('meadow', { spawn: ZONE_SPAWN.meadow.clone(), announce: true, instant: true });
     this.updateHearts(true);
     this.refreshContinueLabel();
     this.toast('Save data reset', '↺');
@@ -789,14 +1005,91 @@ class Game {
     setTimeout(() => el.remove(), 3800);
   }
 
-  showZoneCard() {
+  showZoneCard(zone = this.zone) {
     const card = $('#zonecard');
     if (!card) return;
-    $('#zc-name').textContent = 'Sunlit Meadow';
-    $('#zc-sub').textContent = 'Where the world wakes';
+    const info = ZONES[zone] || ZONES.meadow;
+    $('#zc-name').textContent = info.name;
+    $('#zc-sub').textContent = info.sub;
     card.classList.remove('show');
     void card.offsetWidth;
     card.classList.add('show');
+  }
+
+  updateProgressionUi() {
+    if (!this.world) return;
+    const info = ZONES[this.zone] || ZONES.meadow;
+    const zoneLabel = $('#zone-label');
+    if (zoneLabel && zoneLabel.textContent !== info.name) zoneLabel.textContent = info.name;
+
+    const bossSpec = this.world.bossSpawns[this.zone];
+    const bossName = bossSpec?.name || 'Warden';
+    const zoneGems = this.world.gems.filter((g) => g.zone === this.zone);
+    const collected = zoneGems.filter((g) => g.collected).length;
+    const defeated = !!this.bossesDefeated[this.zone];
+    let text;
+
+    if (this.boss?.alive && this.boss.engaged) {
+      text = `${bossName} engaged · ${this.boss.phaseLabel()}`;
+    } else if (!defeated) {
+      text = `Shards ${collected}/${zoneGems.length} · awaken the ${bossName}`;
+    } else if (this.zone === 'meadow') {
+      text = 'The Ruins Gate is open · climb the northern stair';
+    } else if (this.zone === 'ruins') {
+      text = 'Crystal portal awakened · seek the northern dais';
+    } else if (this.zone === 'crystal') {
+      text = 'Sky portal awakened · ascend from the far dais';
+    } else {
+      text = 'Dawn restored · wander the isles';
+    }
+
+    const obj = $('#objective-text');
+    if (obj && obj.textContent !== text) obj.textContent = text;
+  }
+
+  onBossEngaged(boss) {
+    this.updateProgressionUi();
+    this.effects.addShake(0.25, 0.4);
+  }
+
+  onBossDefeated(boss) {
+    const zone = boss.zone;
+    if (this.bossesDefeated[zone]) return;
+    this.bossesDefeated[zone] = true;
+    this.syncProgressionWorld(false);
+
+    this.player?.healFull();
+    this.updateHearts(true);
+    this.gemCount = this.world.gems.filter((g) => g.collected).length;
+    this.sfx('checkpoint');
+
+    const messages = {
+      meadow: 'Moss Golem felled · the Ruins Gate opens',
+      ruins: 'Rune Sentinel felled · the crystal portal awakens',
+      crystal: 'Prism Warden felled · the sky portal blazes open',
+      sky: 'Storm Drake felled · the dawn is mended',
+    };
+    this.toast(messages[zone] || 'Warden felled', '✦');
+    this.updateProgressionUi();
+    this.saveProgress();
+
+    if (zone === 'sky') {
+      // Let the death effects breathe; the loop shows the screen once
+      // the world is still, even if the player paused in the meantime.
+      this.victoryDelay = 1.8;
+    }
+  }
+
+  onEnemyKilled(enemy) {
+    this.kills++;
+    // A small mercy: fallen enemies sometimes leave a mote of light.
+    if (this.player && !this.player.dead && Math.random() < 0.18 && this.player.hp < this.player.maxHp) {
+      this.player.addHp(1);
+      this.effects.burst(enemy.center, {
+        count: 10, speed: 2, size: 0.16, life: 0.5, gravity: 1,
+        colors: [0xffe6a2, 0xffffff],
+      });
+    }
   }
 
   flash(sel) {
@@ -845,24 +1138,31 @@ class Game {
     if (el) el.textContent = String(count);
     const total = $('#gem-total');
     if (total) total.textContent = `/ ${this.world.gems.length}`;
-    const obj = $('#objective-text');
-    if (obj) obj.textContent = count >= this.world.gems.length
-      ? 'Stage 1 complete · awaiting Stage 2'
-      : 'Explore the meadow · gather dawn shards';
+    this.updateProgressionUi();
+  }
+
+  getCombatTargets() {
+    const list = this.enemies ? this.enemies.getTargets() : [];
+    if (this.boss?.alive) list.push(this.boss);
+    return list;
   }
 
   registerAttack(stage, position, facing) {
     let hit = false;
-    for (const target of this.targets) {
+    let hitBoss = false;
+    const damage = stage === 2 ? 2 : 1;
+    for (const target of this.getCombatTargets()) {
       if (!target.tryHit(position, facing)) continue;
-      target.pop();
+      const isBoss = target === this.boss;
+      target.takeDamage(damage, position);
       hit = true;
-      this.effects.hitSpark(target.center, target.color, 26);
+      if (isBoss) hitBoss = true;
+      this.effects.hitSpark(target.center, target.color || 0xffe3a0, 26);
       this.effects.burst(target.center, {
-        count: 18, speed: 4.2, size: 0.18, life: 0.55, gravity: -2, drag: 2.4,
-        colors: [target.color, 0xffffff, 0xfff1c2],
+        count: isBoss ? 26 : 18, speed: 4.2, size: 0.18, life: 0.55, gravity: -2, drag: 2.4,
+        colors: [target.color || 0xffe3a0, 0xffffff, 0xfff1c2],
       });
-      this.effects.addShake(0.08, 0.16);
+      this.effects.addShake(isBoss ? 0.16 : 0.08, isBoss ? 0.24 : 0.16);
       this.sfx('enemyHit');
       this.combo = this.comboTimer > 0 ? this.combo + 1 : 1;
       this.comboTimer = 1.35;
@@ -873,10 +1173,12 @@ class Game {
           pop.classList.add('show');
         }
       }
-      if (this.lockTarget === target) this.lockTarget = null;
+      if (!target.alive && this.lockTarget === target) this.lockTarget = null;
     }
     if (hit) {
       this.hudKick = 0.12;
+      this.hitStop = Math.max(this.hitStop, hitBoss ? 0.075 : 0.045);
+      this.updateProgressionUi();
     } else {
       this.sfx('hit', 0.4);
     }
@@ -886,11 +1188,11 @@ class Game {
 
   findLockTarget() {
     let best = null;
-    let bestDist = 20;
+    let bestDist = 22;
     const origin = this.player.position;
-    for (const target of this.targets) {
+    for (const target of this.getCombatTargets()) {
       if (!target.alive) continue;
-      const d = origin.distanceTo(target.position);
+      const d = origin.distanceTo(target.center || target.position);
       if (d < bestDist) { best = target; bestDist = d; }
     }
     return best;
@@ -992,16 +1294,31 @@ class Game {
       this.fpsClock = 0;
     }
 
+    // Poll gamepads every frame (look axes, fresh button edges).
+    if (this.input) {
+      this.input.update(dt);
+      if (this.state !== 'playing' && this.state !== 'dead') this.input.consumeLook();
+    }
+
     if (this.state === 'playing' || this.state === 'dead') {
       this.readLook();
 
-      if (this.state === 'playing') {
-        this.accumulator = Math.min(this.accumulator + dt, STEP * 6);
-        while (this.accumulator >= STEP) {
-          this.world.update(STEP, this.elapsed, this.player.position);
-          this.player.update(STEP, this.input, this.camYaw, this.lockTarget?.position || null);
-          this.accumulator -= STEP;
-          this.playTime += STEP;
+      if (this.state === 'playing' && !this.transitioning) {
+        if (this.hitStop > 0) {
+          this.hitStop = Math.max(0, this.hitStop - dt);
+        } else {
+          this.accumulator = Math.min(this.accumulator + dt, STEP * 6);
+          let steps = 0;
+          while (this.accumulator >= STEP && steps < 6) {
+            this.world.update(STEP, this.elapsed, this.player.position);
+            this.player.update(STEP, this.input, this.camYaw, this.lockTarget?.position || null);
+            this.enemies.update(STEP, this.player);
+            this.boss?.update(STEP, this.player);
+            this.projectiles.update(STEP, this.player);
+            this.accumulator -= STEP;
+            this.playTime += STEP;
+            steps++;
+          }
         }
         if (this.comboTimer > 0) {
           this.comboTimer -= dt;
@@ -1011,24 +1328,29 @@ class Game {
           }
         }
         this.pollActions(dt);
+        if (this.victoryDelay > 0) {
+          this.victoryDelay -= dt;
+          if (this.victoryDelay <= 0) this.showVictory();
+        }
+      } else if (this.state === 'dead') {
+        this.world.update(dt, this.elapsed, this.player.position);
       }
 
-      for (const target of this.targets) target.update(dt);
-      this.world.update(dt, this.elapsed, this.player.position);
       this.effects.update(dt, this.player.position);
       this.updateCamera(dt);
       this.player.updateVisual(dt, this.camera);
       this.env.update(dt, this.player.center);
       this.updateHud();
     } else if (this.state === 'menu') {
-      for (const target of this.targets) target.update(dt);
       this.world.update(dt, this.elapsed, this.player.position);
       this.effects.update(dt, this.player.position);
       this.player.updateVisual(dt, this.camera);
       this.updateMenuCamera(dt);
       this.env.update(dt, new THREE.Vector3(0, 2, 7));
       this.updateHud();
-    } else if (this.state === 'paused') {
+    } else if (this.state === 'paused' || this.state === 'victory') {
+      this.world.update(dt, this.elapsed, this.player.position);
+      this.effects.update(dt, this.player.position);
       this.player.updateVisual(dt, this.camera);
       this.env.update(dt, this.player.center);
       this.updateHud();
@@ -1047,6 +1369,7 @@ class Game {
     }
 
     this.saveClock += dt;
+    if (this.state === 'playing') this.saveDirty = true;
     if (this.state === 'playing' && this.saveClock > 10) {
       this.saveClock = 0;
       if (this.saveDirty) {
@@ -1071,6 +1394,7 @@ class Game {
 
   pollActions(dt) {
     const input = this.input;
+    if (this.transitioning) return;
 
     if (input.consumePressed('lock')) {
       if (this.lockTarget) {
@@ -1080,7 +1404,7 @@ class Game {
         this.lockTarget = this.findLockTarget();
         if (this.lockTarget) {
           this.sfx('ui');
-          this.toast('Locked · training wisp', '◎');
+          this.toast(`Locked · ${this.lockTarget.name || 'warden'}`, '◎');
         } else {
           this.toast('Nothing to lock onto', '◎');
         }
@@ -1096,6 +1420,7 @@ class Game {
       if (dx * dx + dz * dz < 2.7 * 2.7 && Math.abs(cp.position.y - this.player.position.y) < 2.5) {
         cp.activate();
         this.respawn.copy(cp.position).add(new THREE.Vector3(0, 0.08, 1.8));
+        this.respawnZone = cp.zone;
         this.player.addHp(2);
         this.updateHearts(true);
         this.sfx('checkpoint');
@@ -1121,42 +1446,90 @@ class Game {
         this.saveProgress();
         if (this.gemCount >= this.world.gems.length) {
           setTimeout(() => {
-            this.toast('All shards gathered · Stage 1 complete', '✦');
+            this.toast('Every dawn shard gathered', '✦');
             this.sfx('victory');
           }, 500);
         }
       }
     }
 
-    // Sealed gate interaction
-    const gate = this.world.gates.find((g) => g.zone === 'meadow');
+    /* ---------------- gates & portals ---------------- */
+    const gate = this.world.gates.find((g) => g.zone === this.zone);
     let nearGate = false;
     if (gate) {
       const dx = gate.group.position.x - this.player.position.x;
       const dz = gate.group.position.z - this.player.position.z;
-      nearGate = Math.hypot(dx, dz) < 7.5 && Math.abs(this.player.position.y - gate.group.position.y) < 5;
+      nearGate = Math.hypot(dx, dz) < 8.0 && Math.abs(this.player.position.y - gate.group.position.y) < 5.5;
     }
+
+    let nearPortal = null;
+    for (const portal of this.world.portals) {
+      if (portal.zone !== this.zone) continue;
+      const dx = portal.position.x - this.player.position.x;
+      const dz = portal.position.z - this.player.position.z;
+      if (Math.hypot(dx, dz) < 5.6 && Math.abs(this.player.position.y - portal.position.y) < 5.5) {
+        nearPortal = portal;
+        break;
+      }
+    }
+
+    let promptText = '';
+    if (nearPortal) {
+      promptText = nearPortal.unlocked
+        ? `<kbd>E</kbd> Travel to ${nearPortal.label}`
+        : `✦ Sealed by the ${this.bossName(this.zone)}`;
+    } else if (nearGate) {
+      promptText = gate.open > 0.55
+        ? '<kbd>E</kbd> Enter the Ancient Ruins'
+        : `✦ Sealed by the ${this.bossName('meadow')}`;
+    }
+
     const prompt = $('#interact');
-    if (prompt && nearGate !== this.lastInteract) {
-      this.lastInteract = nearGate;
-      if (nearGate) {
-        prompt.innerHTML = '<kbd>E</kbd> Inspect the sealed gate';
+    if (prompt && promptText !== this.lastPrompt) {
+      this.lastPrompt = promptText;
+      if (promptText) {
+        prompt.innerHTML = promptText;
         prompt.classList.add('visible');
       } else {
         prompt.classList.remove('visible');
       }
     }
-    if (nearGate && input.consumePressed('interact')) {
-      this.sfx('ui');
-      this.toast('The Ancient Ruins open in Stage 2', '⌛');
+
+    if (input.consumePressed('interact')) {
+      if (nearPortal) {
+        if (nearPortal.unlocked) {
+          this.travelToZone(nearPortal.targetZone);
+        } else {
+          this.sfx('ui');
+          this.toast(`${nearPortal.label} is sealed · defeat the ${this.bossName(this.zone)}`, '⌛');
+        }
+      } else if (nearGate) {
+        if (gate.open > 0.55) {
+          this.travelToZone('ruins');
+        } else {
+          this.sfx('ui');
+          this.toast(`The gate is sealed · defeat the ${this.bossName('meadow')}`, '⌛');
+        }
+      }
+    }
+
+    // Walking through the opened meadow gate carries you down the stair.
+    if (this.zone === 'meadow' && gate && gate.open > 0.55 && this.player.position.z < -60.5 && this.player.position.y > 1.1) {
+      this.travelToZone('ruins');
+      return;
     }
 
     // Release lock if the target drifts too far away.
     if (this.lockTarget) {
-      if (this.player.position.distanceTo(this.lockTarget.position) > 24) this.lockTarget = null;
+      const t = this.lockTarget.center || this.lockTarget.position;
+      if (this.player.position.distanceTo(t) > 24) this.lockTarget = null;
     }
 
     if (this.hintTimer > 0) this.hintTimer -= dt;
+  }
+
+  bossName(zone) {
+    return this.world?.bossSpawns[zone]?.name || 'warden';
   }
 
   toggleMute() {
@@ -1184,21 +1557,60 @@ class Game {
       if (ready) ready.textContent = ratio <= 0.01 ? 'READY' : `${Math.ceil(this.player.dashCooldown * 10) / 10}s`;
     }
 
-    // Compass to nearest uncollected shard (or current lock target)
+    // Boss health bar
+    const bossbar = $('#bossbar');
+    if (bossbar) {
+      const live = this.boss?.alive && this.boss.engaged;
+      bossbar.classList.toggle('visible', !!live);
+      if (live) {
+        const fill = $('#boss-fill');
+        if (fill) fill.style.width = `${Math.max(0, this.boss.hpRatio * 100)}%`;
+        const name = $('#boss-name');
+        if (name) name.textContent = this.boss.name;
+        const phase = $('#boss-phase');
+        if (phase) phase.textContent = this.boss.phaseLabel();
+      }
+    }
+
+    // Compass to the current goal: lock target, active warden, nearest
+    // shard in this realm, then the realm's exit.
     const compass = $('#compass');
     if (compass) {
       let target = null;
       let best = Infinity;
-      for (const gem of this.world.gems) {
-        if (gem.collected) continue;
-        const d = this.player.position.distanceTo(gem.position);
-        if (d < best) { best = d; target = gem; }
+      if (this.lockTarget?.alive) {
+        target = this.lockTarget;
+        best = this.player.position.distanceTo(target.center || target.position);
+      } else if (this.boss?.alive && this.boss.engaged) {
+        target = this.boss;
+        best = this.player.position.distanceTo(this.boss.position);
+      } else {
+        for (const gem of this.world.gems) {
+          if (gem.collected || gem.zone !== this.zone) continue;
+          const d = this.player.position.distanceTo(gem.position);
+          if (d < best) { best = d; target = gem; }
+        }
+        if (!target && this.bossesDefeated[this.zone]) {
+          if (this.zone === 'meadow') {
+            const gate = this.world.gates.find((g) => g.zone === 'meadow');
+            if (gate) {
+              target = { position: gate.group.position };
+              best = this.player.position.distanceTo(gate.group.position);
+            }
+          } else if (this.zone === 'ruins') {
+            const p = this.world.portals.find((x) => x.id === 'portal_crystal');
+            if (p) { target = p; best = this.player.position.distanceTo(p.position); }
+          } else if (this.zone === 'crystal') {
+            const p = this.world.portals.find((x) => x.id === 'portal_sky');
+            if (p) { target = p; best = this.player.position.distanceTo(p.position); }
+          }
+        }
       }
-      if (this.lockTarget) { target = this.lockTarget; best = this.player.position.distanceTo(this.lockTarget.position); }
-      compass.classList.toggle('hidden', !target);
-      if (target) {
-        const dx = target.position.x - this.player.position.x;
-        const dz = target.position.z - this.player.position.z;
+      const targetPos = target ? (target.center || target.position) : null;
+      compass.classList.toggle('hidden', !targetPos);
+      if (targetPos) {
+        const dx = targetPos.x - this.player.position.x;
+        const dz = targetPos.z - this.player.position.z;
         const targetAngle = Math.atan2(dx, dz);
         const cameraAngle = this.camYaw + Math.PI;
         let rel = targetAngle - cameraAngle;
@@ -1226,6 +1638,12 @@ class Game {
       } else {
         reticle.classList.remove('visible');
       }
+    }
+
+    const progSig = `${this.zone}:${this.boss?.engaged ? 1 : 0}:${this.boss?.phase || 0}:${this.bossesDefeated[this.zone] ? 1 : 0}`;
+    if (this._progSig !== progSig) {
+      this._progSig = progSig;
+      this.updateProgressionUi();
     }
 
     // Subtle input hint fades once the player has moved or the timer ends.

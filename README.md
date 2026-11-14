@@ -16,3 +16,42 @@
 - 👤 [Explore the creator's projects](https://go.ondev.store/mangunpangianjaya-ai).
 - 🌍 [Create with OMGithub](https://go.ondev.store/).
 <!-- omgithub:readme:end -->
+
+## Aetherbound — Shards of Dawn
+
+A self-contained Three.js third-person action adventure. Cross four connected
+realms — Sunlit Meadow, Ancient Ruins, Crystal Caverns and Skybound Isles —
+gather 32 dawn shards, and defeat the four wardens who seal the road to dawn.
+
+### Play
+
+Serve the repository root over HTTP and open the page:
+
+```bash
+python3 -m http.server 3002
+# then open http://localhost:3002
+```
+
+Three.js and the fonts load from CDNs, so an internet connection is required.
+
+### Controls
+
+| Action | Keyboard / mouse |
+| --- | --- |
+| Move | `W` `A` `S` `D` |
+| Look | Mouse (click to capture) |
+| Jump / double jump | `Space` |
+| Dash | `Shift` |
+| Attack combo | `J` / left click |
+| Lock on | `Q` |
+| Interact / travel | `E` |
+| Pause | `Esc` |
+| Mute | `M` |
+
+Gamepad and touch controls are also supported.
+
+### Progress
+
+Each realm's warden guards the exit. Defeating a warden opens the gate or portal
+to the next realm. Checkpoints restore health and set your respawn point; the
+journey autosaves every few seconds and whenever progress changes.

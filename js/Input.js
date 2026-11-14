@@ -193,7 +193,7 @@ export class Input {
     // Standard mapping: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 8 Back, 9 Start
     const mappings = [
       [0, 'jump'], [2, 'attack'], [5, 'dash'], [4, 'lock'],
-      [9, 'pause'], [8, 'mute'], [1, 'dash'],
+      [9, 'pause'], [8, 'mute'], [1, 'dash'], [3, 'interact'],
     ];
     for (const [idx, action] of mappings) {
       if (btns[idx] && !this.pad.prev[idx]) {
@@ -347,10 +347,11 @@ export class Input {
       if (KEY_MAP[code] === action && this.keys.has(code)) return true;
     }
     if (this.pad.connected) {
-      if (action === 'jump' && (this.pad.buttons[0] || this.pad.buttons[3])) return true;
+      if (action === 'jump' && this.pad.buttons[0]) return true;
       if (action === 'attack' && this.pad.buttons[2]) return true;
       if (action === 'dash' && (this.pad.buttons[5] || this.pad.buttons[1])) return true;
       if (action === 'lock' && this.pad.buttons[4]) return true;
+      if (action === 'interact' && this.pad.buttons[3]) return true;
     }
     return false;
   }

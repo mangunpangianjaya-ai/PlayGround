@@ -47,6 +47,12 @@ export function buildRuins(world) {
   world.addCheckpoint('ruins', 0, 0, TOP + 0.02, -66, 'Ruins Threshold');
   world.addRuneCircle(V3(0, TOP + 0.03, -66), 4.2, 0xffd28a, 0.25);
   world.arch(0, TOP, -74, { width: 9, height: 5.4 });
+  // Return waystone back to the meadow.
+  world.addPortal({
+    id: 'portal_meadow_return', zone: 'ruins', targetZone: 'meadow',
+    position: V3(12.5, TOP, -66), unlocked: true,
+    colorA: 0x9fe4a8, colorB: 0xffe2a0, label: 'Sunlit Meadow',
+  });
 
   for (let i = 0; i < 5; i++) {
     const z = -74 - i * 9.5;

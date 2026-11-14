@@ -64,9 +64,8 @@ export class World {
     this.materials = this._makeMaterials();
     this._makeGrassMaterial();
 
-    // Each selected zone appends itself to the shared scene.
-    // Stage 1 passes only 'meadow'; the builders for later zones stay
-    // available but dormant until those stages are approved.
+    // Each selected zone appends itself to the shared scene. The full
+    // campaign passes all four realms; partial sets are still supported.
     const build = (zone, fn) => {
       if (!this.activeZones || this.activeZones.has(zone)) fn(this);
     };
