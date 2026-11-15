@@ -358,9 +358,11 @@
 
   /* ---------- mobile / responsive ---------- */
   @media (max-width: 760px) {
-    .brand-title { font-size: 52px; }
+    .brand-title { font-size: clamp(30px, 10.6vw, 52px); letter-spacing: 0.005em; }
+    .brand-sub { letter-spacing: 0.36em; font-size: 11px; }
+    .brand-kicker { font-size: 8px; letter-spacing: 0.2em; }
     .brand-desc { font-size: 13px; max-width: 320px; }
-    .menu-inner { gap: 22px; margin-left: 24px; }
+    .menu-inner { gap: 22px; margin-left: 24px; width: calc(100% - 48px); max-width: 560px; }
     .menu-footer { display: none; }
     .hud-top-center { display: none; }
     .hud-top-left { top: 12px; left: 14px; }

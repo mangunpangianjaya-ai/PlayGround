@@ -100,6 +100,13 @@ export function buildSky(world) {
   world.cloudPlatform(19, 50.0, -122, 6.2, 5.2, {
     moving: true, axis: V3(0, 0, 1), amplitude: 5, speed: 0.35, phase: 0.8, zone: 'sky',
   });
+  // Stepping cloud beneath the high shard near the bridge entrance.
+  world.cloudPlatform(10, 45.9, -84, 6.0, 5.0);
+  // Cloud steps up to the high northern isles.
+  world.cloudPlatform(0, 49.2, -134, 5.5, 4.5);
+  world.cloudPlatform(-6, 51.3, -134, 5.5, 4.5);
+  world.cloudPlatform(22, 49.2, -128.5, 5.5, 4.5);
+  world.cloudPlatform(28, 51.3, -128.5, 5.5, 4.5);
 
   /* ---------------- waterfalls ---------------- */
   world.waterfall(-9, SPAWN_Y, -58.9, 6.5, 30, { speed: 0.55, color: 0xcdf7ff, rotation: 0 });
@@ -119,7 +126,7 @@ export function buildSky(world) {
     [31, 46.2, -104],
     [-17, 54.2, -134],
     [27, 53.2, -138],
-    [10, 50.4, -84],
+    [10, 47.6, -84],
     [0, SPAWN_Y + 2.5, -90],
     [14, MAIN_Y + 1.2, -120],
   ];

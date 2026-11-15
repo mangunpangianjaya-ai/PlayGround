@@ -106,11 +106,14 @@ class TrainingWisp {
     this.home = position.clone();
     this.position = position.clone();
     this.color = color;
+    this.name = 'Training Wisp';
     this.phase = phase;
     this.alive = true;
     this.cooldown = 0;
     this.time = phase;
     this.radius = 0.55;
+    this.maxHp = 3;
+    this.hp = this.maxHp;
 
     const group = new THREE.Group();
     group.position.copy(position);
@@ -167,6 +170,13 @@ class TrainingWisp {
     return true;
   }
 
+  takeDamage(amount = 1) {
+    if (!this.alive) return false;
+    this.hp = Math.max(0, this.hp - amount);
+    if (this.hp <= 0) this.pop();
+    return true;
+  }
+
   pop() {
     if (!this.alive) return;
     this.alive = false;
@@ -180,6 +190,7 @@ class TrainingWisp {
       this.cooldown -= dt;
       if (this.cooldown <= 0) {
         this.alive = true;
+        this.hp = this.maxHp;
         this.group.visible = true;
         this.group.scale.setScalar(0.01);
       }
@@ -285,6 +296,7 @@ class Game {
       this.player = new Player(this.scene, this.world, this.effects, this.makeCallbacks());
       this.projectiles = new ProjectileSystem(this.scene, this.effects, this);
       this.enemies = new EnemySystem(this);
+      this.createTrainingWisps();
 
       // Gentle camera-side fill so the character reads against the sunlit grass.
       this.playerLight = new THREE.PointLight(0xfff0d8, 7, 8.5, 2);
@@ -510,13 +522,6 @@ class Game {
 
     this.syncSettingsUI();
 
-    // Escape / pointer-lock housekeeping.
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Escape' && this.state === 'playing') {
-        e.preventDefault();
-        this.pause();
-      }
-    });
     document.addEventListener('pointerlockchange', () => {
       if (!document.pointerLockElement && this.state === 'playing') {
         this.hintTimer = Math.max(this.hintTimer, 2.5);
@@ -899,6 +904,13 @@ class Game {
   resetWorldProgress() {
     this.world.gems.forEach((g) => g.restore());
     this.world.checkpoints.forEach((c) => c.reset());
+    for (const wisp of this.targets) {
+      wisp.alive = true;
+      wisp.hp = wisp.maxHp;
+      wisp.cooldown = 0;
+      wisp.group.visible = true;
+      wisp.group.scale.setScalar(1);
+    }
     this.world.setGateOpen('meadow', false, true);
     this.bossesDefeated = EMPTY_BOSSES();
     this.victoryDelay = 0;
@@ -1143,6 +1155,7 @@ class Game {
 
   getCombatTargets() {
     const list = this.enemies ? this.enemies.getTargets() : [];
+    for (const wisp of this.targets) if (wisp.alive) list.push(wisp);
     if (this.boss?.alive) list.push(this.boss);
     return list;
   }
@@ -1299,9 +1312,10 @@ class Game {
       this.input.update(dt);
       if (this.state !== 'playing' && this.state !== 'dead') this.input.consumeLook();
     }
+    for (const wisp of this.targets) wisp.update(dt);
 
     if (this.state === 'playing' || this.state === 'dead') {
-      this.readLook();
+      this.readLook(dt);
 
       if (this.state === 'playing' && !this.transitioning) {
         if (this.hitStop > 0) {
@@ -1365,7 +1379,10 @@ class Game {
     // Global hotkeys that work even when paused / on menus.
     if (this.input) {
       if (this.input.consumePressed('mute')) this.toggleMute();
-      if (this.state === 'playing' && this.input.consumePressed('pause')) this.pause();
+      if (this.input.consumePressed('pause')) {
+        if (this.state === 'playing') this.pause();
+        else if (this.state === 'paused') this.resume();
+      }
     }
 
     this.saveClock += dt;
@@ -1381,12 +1398,25 @@ class Game {
     this.env.render(dt);
   }
 
-  readLook() {
+  readLook(dt = 1 / 60) {
     if (!this.input) return;
     const look = this.input.consumeLook();
-    if (look.x || look.y) {
+    const manual = !!(look.x || look.y);
+    if (manual) {
       this.camYaw -= look.x;
       this.camPitch = clamp(this.camPitch + look.y, -0.28, 1.02);
+    }
+    // Soft lock-on: when the player isn't steering the camera, ease it
+    // behind the player so the locked foe stays framed.
+    if (!manual && this.lockTarget?.alive) {
+      const t = this.lockTarget.center || this.lockTarget.position;
+      const dx = t.x - this.player.position.x;
+      const dz = t.z - this.player.position.z;
+      if (dx * dx + dz * dz > 0.01) {
+        const desired = Math.atan2(-dx, -dz);
+        const diff = Math.atan2(Math.sin(desired - this.camYaw), Math.cos(desired - this.camYaw));
+        this.camYaw += diff * (1 - Math.exp(-2.8 * dt));
+      }
     }
     const zoom = this.input.consumeZoom();
     if (zoom) this.camDistance = clamp(this.camDistance + zoom * 4.5, 3.6, 12.5);

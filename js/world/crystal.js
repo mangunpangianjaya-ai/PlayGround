@@ -138,25 +138,42 @@ export function buildCrystal(world) {
   world.addPlatform(-28, -18, -152, 5.2, 0.8, 5.2, M.ice);
   world.addPlatform(-28, -14.5, -152, 3.4, 0.8, 3.4, M.ice);
   world.addPlatform(27, -16, -168, 5.6, 0.8, 5.6, M.ice);
-  world.addPlatform(27, -12, -168, 3.6, 0.8, 3.6, M.ice);
+  world.addPlatform(27, -12.3, -168, 3.6, 0.8, 3.6, M.ice);
   world.addPlatform(-12, -19, -174, 4.4, 0.7, 4.4, M.ice);
   world.addPlatform(-8, -15.5, -174, 3.4, 0.7, 3.4, M.ice);
   world.addPlatform(-8, -10.5, -192, 5, 0.8, 5, M.ice);
   world.addPlatform(-2, -14.8, -192, 3.2, 0.7, 3.2, M.ice);
 
   // moving lifts
-  const liftA = makeCrystalSlab(-20, -19, -162, 3.4, 3.4);
-  new MovingPlatform(world, liftA, V3(3.4, 0.7, 3.4), { axis: V3(0, 1, 0), amplitude: 3.2, speed: 0.55, phase: 0.2, zone: 'crystal' });
-  const liftB = makeCrystalSlab(16, -17, -186, 3.6, 3.6);
-  new MovingPlatform(world, liftB, V3(3.6, 0.7, 3.6), { axis: V3(0, 1, 0), amplitude: 2.8, speed: 0.48, phase: 2.2, zone: 'crystal' });
-  const sweep = makeCrystalSlab(0, -19.5, -160, 4.4, 3.0);
+  // Keep the lift bottoms within a short jump of the cavern floor so the player
+  // can board them; their upper stops connect to the raised shard routes.
+  const liftA = makeCrystalSlab(-20, -19.95, -162, 3.4, 3.4);
+  new MovingPlatform(world, liftA, V3(3.4, 0.7, 3.4), { axis: V3(0, 1, 0), amplitude: 3.6, speed: 0.55, phase: 0.2, zone: 'crystal' });
+  const liftB = makeCrystalSlab(16, -19.95, -186, 3.6, 3.6);
+  new MovingPlatform(world, liftB, V3(3.6, 0.7, 3.6), { axis: V3(0, 1, 0), amplitude: 3.6, speed: 0.48, phase: 2.2, zone: 'crystal' });
+  const sweep = makeCrystalSlab(0, -23.15, -160, 4.4, 3.0);
   new MovingPlatform(world, sweep, V3(4.4, 0.7, 3.0), { axis: V3(1, 0, 0), amplitude: 8, speed: 0.36, phase: 0.9, zone: 'crystal' });
 
+  // Tall crystal elevators carry the climb up to the floating shard gardens.
+  const makeLift = (x, z, lowTop, highTop, w, d, phase) => {
+    const midTop = (lowTop + highTop) / 2;
+    const slab = makeCrystalSlab(x, midTop - 0.35, z, w, d);
+    new MovingPlatform(world, slab, V3(w, 0.7, d), {
+      axis: V3(0, 1, 0), amplitude: (highTop - lowTop) / 2, speed: 0.44, phase, zone: 'crystal',
+    });
+    return slab;
+  };
+  makeLift(-33, -152, -23.1, -14.0, 3.4, 3.4, 0.4);
+  makeLift(32, -168, -23.1, -11.8, 3.4, 3.4, 2.4);
+  makeLift(-13, -169.5, -23.1, -15.0, 3.2, 3.2, 1.1);
+  makeLift(-8, -196.5, -23.1, -10.6, 3.6, 3.6, 3.0);
+
   /* ---------------- sky portal ---------------- */
-  world.addPlatform(0, TOP + 0.6, -201, 10, 0.6, 8.6, M.stoneDark);
+  // Keep the dais within the player's 0.56-unit step-up range from the cavern floor.
+  world.addPlatform(0, TOP + 0.25, -201, 10, 0.6, 8.6, M.stoneDark);
   world.addPortal({
     id: 'portal_sky', zone: 'crystal', targetZone: 'sky',
-    position: V3(0, TOP + 0.6, -201), unlocked: false,
+    position: V3(0, TOP + 0.25, -201), unlocked: false,
     colorA: 0xb48cff, colorB: 0xffe6a2, label: 'Skybound Isles',
   });
   world.brazier(-6.2, TOP + 0.6, -200, { color: 0xb48cff });
@@ -166,15 +183,16 @@ export function buildCrystal(world) {
   const gems = [
     [0, TOP + 1.2, -150],
     [-28, -13.4, -152],
-    [27, -10.9, -168],
+    [27, -11.1, -168],
     [-8, -9.4, -192],
     [16, -17.5, -186],
     [30, TOP + 1.2, -196],
     [-31, TOP + 1.2, -192],
     [0, TOP + 6.2, -186],
   ];
-  // floating pedestal beneath the high shard
+  // floating pedestal beneath the high shard, with a stepping slab below
   world.addPlatform(0, TOP + 5.4, -186, 4.2, 0.7, 4.2, M.ice);
+  world.addPlatform(3.4, -21.4, -188.5, 3.0, 0.7, 3.0, M.ice);
   gems.forEach((g, i) => world.addGem('crystal', i, g[0], g[1], g[2], i % 2 ? 0x9ffff4 : 0xd1b0ff));
 
   /* ---------------- enemies ---------------- */

@@ -138,10 +138,11 @@ export function buildRuins(world) {
   });
   // centre moving slab above the courtyard
   const slab = world.addMesh(new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.5, 3.2), M.stone));
-  slab.position.set(0, 7, -114);
+  slab.position.set(0, 5.3, -114);
   new MovingPlatform(world, slab, V3(4.6, 0.5, 3.2), {
     axis: V3(0, 0, 1), amplitude: 5.5, speed: 0.33, phase: 0.7, zone: 'ruins',
   });
+  world.addPlatform(-6, 7.6, -119.5, 3.2, 0.8, 3.2, M.stoneDark);
   world.addPlatform(-12, 9.4, -122, 4.2, 0.8, 4.2, M.stoneDark);
 
   // spike hazards
@@ -166,9 +167,9 @@ export function buildRuins(world) {
 
   /* ---------------- crystal portal ---------------- */
   // dais and steps
-  world.addPlatform(0, TOP + 0.55, -123, 10, 0.55, 9, M.stoneDark);
+  world.addPlatform(0, TOP + 0.35, -123, 10, 0.4, 9, M.stoneDark);
   for (let i = 0; i < 2; i++) {
-    world.addPlatform(0, TOP + 0.18 + i * 0.18, -117.5 - i * 0.7, 8 - i * 1.2, 0.4, 1.0, M.stone);
+    world.addPlatform(0, TOP + 0.15 + i * 0.15, -117.5 - i * 0.7, 8 - i * 1.2, 0.3, 1.0, M.stone);
   }
   world.addPortal({
     id: 'portal_crystal', zone: 'ruins', targetZone: 'crystal',
@@ -187,10 +188,10 @@ export function buildRuins(world) {
     [-13, TOP + 1.2, -109],
     [30, TOP + 1.2, -120],
     [-12, 10.7, -122],
-    [0, 5.4, -86],
+    [0, 5.85, -86],
   ];
   // a small ledge under the last shard
-  world.addPlatform(0, 4.8, -86, 3.4, 0.7, 3.4, M.stoneDark);
+  world.addPlatform(0, 5.2, -86, 3.4, 0.7, 3.4, M.stoneDark);
   gems.forEach((g, i) => world.addGem('ruins', i, g[0], g[1], g[2]));
 
   /* ---------------- enemies ---------------- */

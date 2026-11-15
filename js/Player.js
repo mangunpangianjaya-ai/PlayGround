@@ -500,8 +500,8 @@ export class Player {
       // only trigger on one-way platforms (none currently) - kept for extensibility
     }
 
-    // physics move
-    this.grounded = false;
+    // Keep the previous frame's grounded state through horizontal collision resolution
+    // so small ledges can be stepped onto before the vertical pass refreshes it.
     this._moveAndCollide(dt);
     if (this.grounded) {
       this.coyote = 0.11;
@@ -588,7 +588,7 @@ export class Player {
   }
 
   _jump() {
-    this.velocity.y = 12.8;
+    this.velocity.y = 14.6;
     this.grounded = false;
     this.coyote = 0;
     this.jumpBuffer = 0;
@@ -603,7 +603,7 @@ export class Player {
   }
 
   _doubleJump() {
-    this.velocity.y = 12.2;
+    this.velocity.y = 13.6;
     this.jumpsUsed = 2;
     this.jumpBuffer = 0;
     this.effects.doubleJump(this.center);
@@ -810,6 +810,12 @@ export class Player {
     this.collisionContact.x = 0;
     this.collisionContact.z = 0;
     const active = this.world.colliders;
+    // Grounding can be refreshed after the horizontal pass, so infer nearby
+    // support here as well; this lets grounded players climb short steps.
+    const supportProbe = this._boxAt(this.position.x, this.position.y - 0.06, this.position.z);
+    const hasGroundSupport = this.grounded || active.some((c) =>
+      c.active && c.box.max.y <= this.position.y + 0.08 &&
+      c.box.max.y >= this.position.y - 0.12 && supportProbe.intersectsBox(c.box));
 
     // X
     this.position.x += this.velocity.x * dt;
@@ -821,7 +827,7 @@ export class Player {
         if (c.box.max.y <= this.position.y + 0.015) continue; // standing on top, not a wall
         if (!box.intersectsBox(c.box)) continue;
         // step up small ledges
-        if (this.grounded && c.box.max.y - this.position.y <= 0.56 && c.box.max.y > this.position.y + 0.02) {
+        if (hasGroundSupport && c.box.max.y - this.position.y <= 0.56 && c.box.max.y > this.position.y + 0.02) {
           this.position.y = c.box.max.y + 0.015;
           this.velocity.y = Math.max(0, this.velocity.y);
           this.standingOn = c;
@@ -855,7 +861,7 @@ export class Player {
         if (!c.active) continue;
         if (c.box.max.y <= this.position.y + 0.015) continue; // standing on top, not a wall
         if (!box.intersectsBox(c.box)) continue;
-        if (this.grounded && c.box.max.y - this.position.y <= 0.56 && c.box.max.y > this.position.y + 0.02) {
+        if (hasGroundSupport && c.box.max.y - this.position.y <= 0.56 && c.box.max.y > this.position.y + 0.02) {
           this.position.y = c.box.max.y + 0.015;
           this.velocity.y = Math.max(0, this.velocity.y);
           this.standingOn = c;
