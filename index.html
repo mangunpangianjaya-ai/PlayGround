@@ -126,9 +126,12 @@
   .btn.primary .btn-label { color: var(--gold); }
   .btn-label { display: flex; align-items: center; gap: 12px; }
   .btn-key { font-size: 10px; letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
+  .btn-hint { display: flex; align-items: center; gap: 10px; }
   .btn-icon { width: 18px; height: 18px; opacity: .9; }
   .btn-arrow { color: var(--cyan); opacity: .65; font-size: 16px; transition: transform .2s, opacity .2s; }
   .btn:hover .btn-arrow { transform: translateX(3px); opacity: 1; }
+  .btn.danger { border-color: rgba(255,111,145,.65); background: linear-gradient(120deg, rgba(255,111,145,.16), rgba(9,31,40,.72)); }
+  .btn.danger .btn-label { color: #ffc3cf; }
   .btn:disabled { opacity: .36; cursor: default; transform: none; }
 
   .menu-footer { display: flex; gap: 20px; align-items: center; color: #6e8b90; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; flex-wrap: wrap; }
@@ -196,6 +199,7 @@
   #hud { position: fixed; inset: 0; opacity: 0; transition: opacity .4s; pointer-events: none; }
   #hud.visible { opacity: 1; }
   .hud-top-left { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: calc(22px + var(--safe-l)); display: flex; flex-direction: column; gap: 10px; }
+  .mobile-objective { display: none; max-width: 190px; font-size: 9px; line-height: 1.45; letter-spacing: .13em; text-transform: uppercase; color: #cfe8e4; text-shadow: 0 1px 8px rgba(0,0,0,.9), 0 1px 2px rgba(0,0,0,.8); }
   .hearts { display: flex; gap: 5px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.5)); }
   .heart { width: 24px; height: 22px; transition: transform .2s, opacity .2s; }
   .heart svg { width: 100%; height: 100%; }
@@ -363,6 +367,7 @@
     .menu-inner { gap: 22px; margin-left: 24px; }
     .menu-footer { display: none; }
     .hud-top-center { display: none; }
+    .mobile-objective { display: block; }
     .hud-top-left { top: 12px; left: 14px; }
     .hud-top-right { top: 12px; right: 14px; }
     .hearts .heart { width: 20px; height: 18px; }
@@ -392,6 +397,7 @@
         <div class="hud-chip"><span class="gem-ico">
           <svg viewBox="0 0 20 20"><path d="M10 1.6 17.3 10 10 18.4 2.7 10z" fill="#7df4e8" stroke="#d8fffa" stroke-width=".7"/><path d="M10 4.2 14.4 10 10 15.8 5.6 10z" fill="#bffcf4" opacity=".6"/></svg>
         </span><b id="gem-count">0</b><span id="gem-total">/ 32</span> shards</div>
+        <div class="mobile-objective" id="mobile-objective">Gather dawn shards</div>
       </div>
       <div class="hud-top-center">
         <div class="zone-label" id="zone-label">Sunlit Meadow</div>
@@ -471,8 +477,8 @@
       </div>
       <p class="brand-desc">Four realms sleep beneath a fractured dawn. Hunt the 32 dawn shards, break the wardens who seal the road, and carry the light from the Sunlit Meadow to the Skybound Isles.</p>
       <div class="menu-actions">
-        <button class="btn primary" id="btn-continue"><span class="btn-label"><span>Enter the Meadow</span></span><span class="btn-arrow">→</span></button>
-        <button class="btn" id="btn-new"><span class="btn-label"><span>New Journey</span></span><span class="btn-key">Enter</span></button>
+        <button class="btn primary" id="btn-continue"><span class="btn-label"><span>Enter the Meadow</span></span><span class="btn-hint"><span class="btn-key">Enter</span><span class="btn-arrow">→</span></span></button>
+        <button class="btn" id="btn-new"><span class="btn-label"><span>New Journey</span></span><span class="btn-arrow">→</span></button>
         <button class="btn" id="btn-settings-menu"><span class="btn-label"><span>Settings</span></span><span class="btn-arrow">→</span></button>
         <button class="btn" id="btn-controls-menu"><span class="btn-label"><span>Controls</span></span><span class="btn-arrow">→</span></button>
       </div>
@@ -636,7 +642,7 @@
     <div class="end-inner">
       <div class="end-kicker">The light remembers</div>
       <h1 class="end-title">Dawnbound</h1>
-      <p class="end-sub">The Aether is whole again. Four realms breathe beneath a mended sky,<br />and the shards of dawn sing your name.</p>
+      <p class="end-sub" id="vi-sub">The Aether is whole again. Four realms breathe beneath a mended sky,<br />and the shards of dawn sing your name.</p>
       <div class="end-stats">
         <div class="end-stat"><b id="vi-shards">32</b><span>Shards</span></div>
         <div class="end-stat"><b id="vi-bosses">4/4</b><span>Wardens</span></div>

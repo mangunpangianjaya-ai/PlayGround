@@ -508,14 +508,18 @@ class Enemy {
 
     const nextX = this.position.x + this.velocity.x * dt;
     const nextZ = this.position.z + this.velocity.z * dt;
-    if (!this.world.inWater(V3(nextX, this.position.y + 0.4, nextZ))) {
+    const probe = V3(nextX, this.position.y + 0.4, nextZ);
+    const ground = groundHeight(this.world, probe);
+    // Don't walk into water or off a ledge. Without this a chase can drag a
+    // ground enemy over the rim of a floating isle and drop it into the void.
+    if (!this.world.inWater(probe) && ground !== null && ground > this.position.y - 2.5) {
       this.position.x = nextX;
       this.position.z = nextZ;
+      this.position.y = ground;
     } else {
       this.velocity.x = 0;
       this.velocity.z = 0;
     }
-    this.position.y = groundHeight(this.world, this.position, 1.2);
 
     this.group.rotation.y = this.facing;
     const speed = Math.hypot(this.velocity.x, this.velocity.z);
@@ -633,6 +637,7 @@ class Enemy {
 function groundHeight(world, position) {
   // Pick the highest collider top beneath the enemy's feet, with a small
   // step allowance so patrolling enemies follow platforms instead of walls.
+  // Returns null when there is no floor under the probe at all.
   let best = -Infinity;
   for (const c of world.colliders) {
     if (!c.active || !c.box) continue;
@@ -641,9 +646,7 @@ function groundHeight(world, position) {
     if (position.z < b.min.z - 0.35 || position.z > b.max.z + 0.35) continue;
     if (b.max.y <= position.y + 0.65 && b.max.y > best) best = b.max.y;
   }
-  // Keep the enemy anchored rather than falling forever off a ledge.
-  if (best === -Infinity) return position.y;
-  return best;
+  return best === -Infinity ? null : best;
 }
 
 /* ============================================================

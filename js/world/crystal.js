@@ -61,7 +61,7 @@ export function buildCrystal(world) {
   world.scene.add(fillC);
 
   /* ---------------- arrival & return ---------------- */
-  world.addCheckpoint('crystal', 0, 0, TOP + 0.02, -146, 'Crystal Landing');
+  world.addCheckpoint('crystal', 0, 0, TOP + 0.02, -153, 'Crystal Landing');
   world.addPortal({
     id: 'portal_ruins_return', zone: 'crystal', targetZone: 'ruins',
     position: V3(0, TOP, -139), unlocked: true,
@@ -69,7 +69,7 @@ export function buildCrystal(world) {
   });
   // arrival arch
   world.arch(0, TOP, -147, { width: 11, height: 6.4, material: M.stoneDark });
-  world.addRuneCircle(V3(0, TOP + 0.03, -146), 5.2, 0x8ff7ec, 0.28);
+  world.addRuneCircle(V3(0, TOP + 0.03, -153), 5.2, 0x8ff7ec, 0.28);
 
   /* ---------------- crystal gardens ---------------- */
   const clusters = [

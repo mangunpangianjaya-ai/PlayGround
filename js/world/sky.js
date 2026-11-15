@@ -162,10 +162,10 @@ export function buildSky(world) {
   world.addEnemy('sky', 'wisp', -14, SPAWN_Y + 4, -74, { patrol: 6, variant: 'storm' });
   world.addEnemy('sky', 'wisp', 18, MAIN_Y + 5, -108, { patrol: 7, variant: 'storm' });
   world.addEnemy('sky', 'wisp', -27, 49, -94, { patrol: 5, variant: 'storm' });
-  world.addEnemy('sky', 'wisp', 28, 49, -133, { patrol: 5, variant: 'storm' });
+  world.addEnemy('sky', 'wisp', 27, 55.5, -133, { patrol: 5, variant: 'storm' });
   world.addEnemy('sky', 'sentry', -10, MAIN_Y, -128, { variant: 'storm' });
   world.addEnemy('sky', 'sentry', 12, MAIN_Y, -99, { variant: 'storm' });
-  world.addEnemy('sky', 'mossling', 22, 45, -103, { patrol: 3, variant: 'storm' });
+  world.addEnemy('sky', 'mossling', 27, 45, -104, { patrol: 3, variant: 'storm' });
 
   // extra cloud wisps for atmosphere
   for (let i = 0; i < 3; i++) {

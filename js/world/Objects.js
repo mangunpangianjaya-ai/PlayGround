@@ -138,7 +138,10 @@ export class Gate {
   }
 
   _apply() {
-    this.bars.position.y = this.open * (this.height + 1.4);
+    // Sink the portcullis into the earth rather than lifting it above the
+    // arch, so an open gate never leaves a floating grate in the sky.
+    const sink = Math.min(1, this.open * 1.8);
+    this.bars.position.y = -sink * (this.height + 1.2);
     this.collider.active = this.open < 0.55;
     this.runeMat.opacity = (1 - this.open) * 0.7;
   }

@@ -13,9 +13,7 @@ import { Player } from './Player.js';
 import { AudioManager } from './Audio.js';
 import { EnemySystem, ProjectileSystem } from './Enemies.js';
 import { createBoss, disposeBoss } from './Bosses.js';
-import { clamp, damp, formatTime, makeGlowSprite, makeRadialTexture } from './Utils.js';
-
-const WISP_GLOW = makeRadialTexture(96, 'rgba(255,255,255,1)', 'rgba(255,255,255,0)', 0.16);
+import { clamp, damp, formatTime } from './Utils.js';
 
 /* All four realms are live. The road between them is gated by
    each realm's warden. */
@@ -30,14 +28,14 @@ const SAVE_VERSION = 2;
 const ZONE_SPAWN = {
   meadow: new THREE.Vector3(0, 0.08, 9),
   ruins: new THREE.Vector3(0, 2.45, -66),
-  crystal: new THREE.Vector3(0, -23.95, -146),
+  crystal: new THREE.Vector3(0, -23.95, -153),
   sky: new THREE.Vector3(0, 44.08, -74),
 };
 
 const TRAVEL_SPAWN = {
   'meadow>ruins': new THREE.Vector3(0, 2.45, -66),
   'ruins>meadow': new THREE.Vector3(0, 0.08, -50),
-  'ruins>crystal': new THREE.Vector3(0, -23.95, -146),
+  'ruins>crystal': new THREE.Vector3(0, -23.95, -153),
   'crystal>ruins': new THREE.Vector3(0, 2.45, -118),
   'crystal>sky': new THREE.Vector3(0, 44.08, -74),
   'sky>crystal': new THREE.Vector3(0, -23.95, -196),
@@ -97,109 +95,6 @@ function isValidSave(data) {
 }
 
 /* ============================================================
-   Training wisp — a small practice target near the Dawn Shrine.
-   These are not enemies; they simply prove the combo and lock-on.
-   ============================================================ */
-class TrainingWisp {
-  constructor(scene, position, { color = 0xffd98a, phase = 0 } = {}) {
-    this.scene = scene;
-    this.home = position.clone();
-    this.position = position.clone();
-    this.color = color;
-    this.phase = phase;
-    this.alive = true;
-    this.cooldown = 0;
-    this.time = phase;
-    this.radius = 0.55;
-
-    const group = new THREE.Group();
-    group.position.copy(position);
-    this.group = group;
-
-    this.coreMat = new THREE.MeshStandardMaterial({
-      color,
-      emissive: new THREE.Color(color).multiplyScalar(0.55),
-      emissiveIntensity: 1.6,
-      metalness: 0.2,
-      roughness: 0.16,
-      transparent: true,
-      opacity: 0.94,
-    });
-    this.core = new THREE.Mesh(new THREE.OctahedronGeometry(0.32, 0), this.coreMat);
-    this.core.castShadow = true;
-    group.add(this.core);
-
-    this.ringMat = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.4,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    this.ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.022, 4, 32), this.ringMat);
-    this.ring.rotation.x = Math.PI / 2.4;
-    group.add(this.ring);
-
-    this.glow = makeGlowSprite({ color, size: 2.2, opacity: 0.4, texture: WISP_GLOW });
-    group.add(this.glow);
-
-    this.light = new THREE.PointLight(color, 0.9, 8, 2);
-    group.add(this.light);
-
-    scene.add(group);
-  }
-
-  get center() {
-    return this.position.clone().add(new THREE.Vector3(0, 0.95, 0));
-  }
-
-  tryHit(playerPos, facing) {
-    if (!this.alive) return false;
-    const dx = this.position.x - playerPos.x;
-    const dz = this.position.z - playerPos.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist > 2.7 || Math.abs(this.position.y - playerPos.y) > 2.2) return false;
-    if (dist > 0.001) {
-      const dot = (dx / dist) * Math.sin(facing) + (dz / dist) * Math.cos(facing);
-      if (dot < 0.05) return false;
-    }
-    return true;
-  }
-
-  pop() {
-    if (!this.alive) return;
-    this.alive = false;
-    this.cooldown = 4.5;
-    this.group.visible = false;
-  }
-
-  update(dt) {
-    this.time += dt;
-    if (!this.alive) {
-      this.cooldown -= dt;
-      if (this.cooldown <= 0) {
-        this.alive = true;
-        this.group.visible = true;
-        this.group.scale.setScalar(0.01);
-      }
-      return;
-    }
-    const targetScale = this.group.scale.x < 1 ? Math.min(1, this.group.scale.x + dt * 4.5) : 1;
-    this.group.scale.setScalar(targetScale);
-    this.position.y = this.home.y + Math.sin(this.time * 2.0 + this.phase) * 0.18;
-    this.group.position.copy(this.position);
-    this.core.rotation.y += dt * 1.4;
-    this.core.rotation.z = Math.sin(this.time * 0.9) * 0.22;
-    this.ring.rotation.z += dt * 0.8;
-    const pulse = 0.82 + Math.sin(this.time * 3.2) * 0.18;
-    this.glow.material.opacity = 0.36 * pulse;
-    this.light.intensity = 0.9 * pulse;
-    this.ringMat.opacity = 0.35 * pulse;
-  }
-}
-
-/* ============================================================
    Game
    ============================================================ */
 class Game {
@@ -232,7 +127,6 @@ class Game {
     this.lastHp = -1;
     this.gemCount = 0;
     this.lockTarget = null;
-    this.targets = [];
     this.combo = 0;
     this.comboTimer = 0;
     this.returnScreen = 'menu';
@@ -243,6 +137,8 @@ class Game {
     this.saveDirty = false;
     this.saveClock = 0;
     this.victoryDelay = 0;
+    this.resetArmedAt = 0;
+    this.newArmedAt = 0;
 
     this.loop = this.loop.bind(this);
   }
@@ -373,17 +269,6 @@ class Game {
     };
   }
 
-  createTrainingWisps() {
-    const spots = [
-      { p: new THREE.Vector3(7.5, 1.1, 1.5), color: 0xffd98a },
-      { p: new THREE.Vector3(-7, 1.25, -5.5), color: 0x8ff7ec },
-      { p: new THREE.Vector3(13, 1.2, -15), color: 0xffb3c8 },
-    ];
-    spots.forEach((spot, i) => {
-      this.targets.push(new TrainingWisp(this.scene, spot.p, { color: spot.color, phase: i * 2.1 }));
-    });
-  }
-
   /* ----------------------------------------------------------
      Resize
      ---------------------------------------------------------- */
@@ -410,7 +295,7 @@ class Game {
       });
     };
 
-    click('#btn-new', () => this.startGame(true));
+    click('#btn-new', () => this.requestNewJourney());
     click('#btn-continue', () => this.startGame(false));
 
     click('#btn-settings-menu', () => this.openScreen('settings', 'menu'));
@@ -423,7 +308,7 @@ class Game {
     click('#btn-respawn', () => this.respawnPlayer());
     click('#btn-go-menu', () => this.quitToMenu(true));
     click('#btn-hud-pause', () => this.pause());
-    click('#btn-reset-save', () => this.resetSave());
+    click('#btn-reset-save', () => this.armResetSave());
     click('#btn-keep-playing', () => this.keepPlaying());
     click('#btn-victory-menu', () => this.quitToMenu(true));
 
@@ -509,6 +394,19 @@ class Game {
     vol('#music-vol', 'music', '#music-value');
 
     this.syncSettingsUI();
+
+    // Enter / Space begins a journey from the title screen.
+    window.addEventListener('keydown', (e) => {
+      if (this.state !== 'menu') return;
+      if (e.code !== 'Enter' && e.code !== 'NumpadEnter' && e.code !== 'Space') return;
+      const visible = document.querySelector('.screen.visible');
+      if (!visible || visible.id !== 'menu') return;
+      if (e.target instanceof HTMLElement && e.target.closest('button')) return;
+      e.preventDefault();
+      if (e.repeat) return;
+      this.audio?.init();
+      this.startGame(!loadJSON(SAVE_KEY));
+    });
 
     // Escape / pointer-lock housekeeping.
     window.addEventListener('keydown', (e) => {
@@ -606,6 +504,7 @@ class Game {
     this.showScreen('menu');
     this.menuTime = 0;
     this.updateMenuCamera(0, true);
+    this.cancelNewJourneyPrompt();
     this.refreshContinueLabel();
   }
 
@@ -635,6 +534,7 @@ class Game {
 
   startGame(fresh) {
     this.audio?.init();
+    this.cancelNewJourneyPrompt();
     if (fresh) {
       this.clearSave();
       this.resetWorldProgress();
@@ -664,7 +564,6 @@ class Game {
     this.input.enabled = true;
     this.input.pressed.clear();
     this.input.attackHeld = false;
-    this.playTime = savedTimeOr(this, 0);
     this.transitioning = false;
     this.victoryDelay = 0;
 
@@ -769,9 +668,9 @@ class Game {
       setTimeout(() => {
         fade.classList.remove('black');
         this.transitioning = false;
-        this.input.enabled = true;
+        this.input.enabled = this.state === 'playing';
         this.input.pressed.clear();
-        if (!this.input.isTouchDevice) this.input.requestLock();
+        if (this.state === 'playing' && !this.input.isTouchDevice) this.input.requestLock();
       }, 220);
     }, 320);
   }
@@ -782,6 +681,7 @@ class Game {
     this.input.enabled = false;
     this.input.pressed.clear();
     this.input.exitLock();
+    this.audio?.setPaused(true);
     this.setTouchVisible(false);
     this.hideScreen('settings');
     this.hideScreen('controls');
@@ -796,6 +696,7 @@ class Game {
     this.state = 'playing';
     this.input.enabled = true;
     this.input.pressed.clear();
+    this.audio?.setPaused(false);
     this.setTouchVisible(true);
     this.hintTimer = 0;
     if (!this.input.isTouchDevice) this.input.requestLock();
@@ -887,6 +788,13 @@ class Game {
     this.$('#vi-shards').textContent = String(this.gemCount);
     this.$('#vi-bosses').textContent = `${ZONE_ORDER.filter((z) => this.bossesDefeated[z]).length}/4`;
     this.$('#vi-time').textContent = formatTime(this.playTime);
+    const totalShards = this.world.gems.length;
+    const sub = $('#vi-sub');
+    if (sub) {
+      sub.innerHTML = this.gemCount >= totalShards
+        ? 'The Aether is whole again. Four realms breathe beneath a mended sky,<br />and every shard of dawn sings your name.'
+        : `The wardens are fallen and the sun rises once more.<br />${totalShards - this.gemCount} dawn shards still wait in the wilds.`;
+    }
     this.$('#hud').classList.remove('visible');
     this.$('#interact').classList.remove('visible');
     this.showScreen('victory');
@@ -973,13 +881,74 @@ class Game {
     this.savedTime = 0;
   }
 
+  requestNewJourney() {
+    const btn = $('#btn-new');
+    const label = btn?.querySelector('.btn-label span') || btn?.querySelector('.btn-label');
+    if (!loadJSON(SAVE_KEY)) {
+      this.startGame(true);
+      return;
+    }
+    const now = performance.now();
+    if (this.newArmedAt && now - this.newArmedAt < 6000) {
+      clearTimeout(this._newTimer);
+      this.newArmedAt = 0;
+      btn?.classList.remove('danger');
+      if (label) label.textContent = 'New Journey';
+      this.startGame(true);
+      return;
+    }
+    this.newArmedAt = now;
+    btn?.classList.add('danger');
+    if (label) label.textContent = 'Erase save & begin';
+    this.toast('Starting over erases this journey. Click again to confirm.', '⚠');
+    clearTimeout(this._newTimer);
+    this._newTimer = setTimeout(() => this.cancelNewJourneyPrompt(), 6000);
+  }
+
+  cancelNewJourneyPrompt() {
+    clearTimeout(this._newTimer);
+    this.newArmedAt = 0;
+    const btn = $('#btn-new');
+    if (!btn) return;
+    btn.classList.remove('danger');
+    const label = btn.querySelector('.btn-label span') || btn.querySelector('.btn-label');
+    if (label) label.textContent = 'New Journey';
+  }
+
+  armResetSave() {
+    const btn = $('#btn-reset-save');
+    const label = btn?.querySelector('.btn-label');
+    const now = performance.now();
+    if (this.resetArmedAt && now - this.resetArmedAt < 6000) {
+      clearTimeout(this._resetTimer);
+      this.resetArmedAt = 0;
+      btn?.classList.remove('danger');
+      if (label) label.textContent = 'Reset save data';
+      this.resetSave();
+      return;
+    }
+    this.resetArmedAt = now;
+    btn?.classList.add('danger');
+    if (label) label.textContent = 'Click again to erase';
+    this.toast('Erase all progress? Click again to confirm', '⚠');
+    clearTimeout(this._resetTimer);
+    this._resetTimer = setTimeout(() => {
+      this.resetArmedAt = 0;
+      btn?.classList.remove('danger');
+      if (label) label.textContent = 'Reset save data';
+    }, 6000);
+  }
+
   resetSave() {
     this.clearSave();
     this.resetWorldProgress();
     this.playTime = 0;
     this.saveClock = 0;
-    this.enterZone('meadow', { spawn: ZONE_SPAWN.meadow.clone(), announce: true, instant: true });
-    this.updateHearts(true);
+    this.saveDirty = false;
+    this.zone = 'meadow';
+    this.respawn.copy(ZONE_SPAWN.meadow);
+    this.respawnZone = 'meadow';
+    this.openMenu();
     this.refreshContinueLabel();
     this.toast('Save data reset', '↺');
   }
@@ -1045,6 +1014,8 @@ class Game {
 
     const obj = $('#objective-text');
     if (obj && obj.textContent !== text) obj.textContent = text;
+    const mob = $('#mobile-objective');
+    if (mob && mob.textContent !== text) mob.textContent = text;
   }
 
   onBossEngaged(boss) {
@@ -1589,6 +1560,10 @@ class Game {
           if (gem.collected || gem.zone !== this.zone) continue;
           const d = this.player.position.distanceTo(gem.position);
           if (d < best) { best = d; target = gem; }
+        }
+        if (!target && this.boss?.alive) {
+          target = this.boss;
+          best = this.player.position.distanceTo(this.boss.position);
         }
         if (!target && this.bossesDefeated[this.zone]) {
           if (this.zone === 'meadow') {
